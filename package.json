@@ -1,0 +1,19 @@
+{
+  "name": "microsoft-reward-v2",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@types/cli-progress": "^3.11.6",
+    "cli-progress": "^3.12.0",
+    "consola": "^3.2.3",
+    "console": "^0.7.2",
+    "edge-paths": "^3.0.5",
+    "puppeteer": "^23.2.1"
+  }
+}
