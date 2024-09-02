@@ -1,4 +1,3 @@
-// Modules
 import AutomationApp from "./modules/AutomationApp";
 
 // Initialize automation app

@@ -1,11 +1,14 @@
-import type { Page } from "puppeteer";
 import { consola } from "consola";
+import type { Page } from "puppeteer";
+import { CookieHandlerModule } from "./CookieHandlerModule";
 
 export class SearchModule {
   private page: Page;
+  private cookieHandler: CookieHandlerModule;
 
   constructor(page: Page) {
     this.page = page;
+    this.cookieHandler = new CookieHandlerModule(page);
   }
 
   async searchBing(searchTerm: string, device: "pc" | "mobile"): Promise<void> {
@@ -24,8 +27,11 @@ export class SearchModule {
         },
       );
 
+      // Accepter les cookies si nécessaire
+      await this.cookieHandler.acceptCookies();
+
       // Attendre que les résultats de recherche soient chargés
-      await this.page.waitForSelector(".b_algo", { timeout: 5000 });
+      await this.page.waitForSelector(".b_algo", { timeout: 2500 });
     } catch (error) {
       consola.error(
         `Erreur lors de la recherche ${device} pour "${searchTerm}":`,
