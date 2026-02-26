@@ -5,9 +5,8 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleDetection": "force",
-    "jsx": "react-jsx",
     "allowJs": true,
-    "types": ["node"],
+    "types": ["chrome"],
 
     // Bundler mode
     "moduleResolution": "bundler",

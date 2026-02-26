@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Microsoft Rewards Bot",
+  "version": "1.0.0",
+  "description": "Automated Bing searches to earn Microsoft Rewards points",
+  "permissions": ["debugger", "tabs", "tabGroups", "alarms", "storage"],
+  "host_permissions": ["https://*.bing.com/*", "https://rewards.bing.com/*", "https://trends.google.fr/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Microsoft Rewards Bot"
+  }
+}

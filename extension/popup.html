@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 340px;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: #0f0f1a;
+      color: #e0e0e0;
+      overflow: hidden;
+    }
+
+    /* --- Header --- */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .header-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: 0.3px;
+    }
+
+    .refresh-btn {
+      width: 30px;
+      height: 30px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #aaa;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      transition: all 0.2s;
+    }
+
+    .refresh-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+    }
+
+    .refresh-btn.loading {
+      animation: spin 0.8s linear infinite;
+      pointer-events: none;
+      color: #0078d4;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* --- Points display --- */
+    .points-section {
+      text-align: center;
+      padding: 20px 20px 16px;
+    }
+
+    .points-star {
+      font-size: 18px;
+      margin-bottom: 4px;
+      opacity: 0.8;
+    }
+
+    .points-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: #FFD700;
+      line-height: 1.1;
+      text-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+    }
+
+    .points-label {
+      font-size: 12px;
+      color: #888;
+      margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .points-value.empty {
+      font-size: 16px;
+      color: #555;
+    }
+
+    /* --- Progress bars --- */
+    .progress-section {
+      padding: 0 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .progress-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .progress-name {
+      color: #aaa;
+    }
+
+    .progress-count {
+      color: #fff;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .progress-bar {
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      min-width: 0;
+    }
+
+    .progress-fill.pc {
+      background: linear-gradient(90deg, #0078d4, #00b4d8);
+    }
+
+    .progress-fill.mobile {
+      background: linear-gradient(90deg, #7c3aed, #a78bfa);
+    }
+
+    /* --- Checkboxes --- */
+    .options-section {
+      padding: 0 20px 16px;
+    }
+
+    .options-card {
+      display: flex;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .options-card label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      color: #ccc;
+      transition: color 0.2s;
+      user-select: none;
+    }
+
+    .options-card label:hover {
+      color: #fff;
+    }
+
+    .options-card input[type="checkbox"] {
+      accent-color: #0078d4;
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+    }
+
+    /* --- Action button --- */
+    .action-section {
+      padding: 0 20px 14px;
+    }
+
+    .action-btn {
+      width: 100%;
+      padding: 11px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      letter-spacing: 0.3px;
+    }
+
+    .action-btn.start {
+      background: linear-gradient(135deg, #0078d4, #005a9e);
+      color: #fff;
+      box-shadow: 0 2px 12px rgba(0, 120, 212, 0.3);
+    }
+
+    .action-btn.start:hover {
+      background: linear-gradient(135deg, #1a8ae6, #0078d4);
+      box-shadow: 0 4px 16px rgba(0, 120, 212, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .action-btn.stop {
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+      color: #fff;
+      box-shadow: 0 2px 12px rgba(220, 38, 38, 0.3);
+    }
+
+    .action-btn.stop:hover {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      box-shadow: 0 4px 16px rgba(220, 38, 38, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .action-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+
+    .action-btn:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    /* --- Status --- */
+    .status-section {
+      padding: 0 20px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .status-dot.idle { background: #555; }
+    .status-dot.running {
+      background: #4fc3f7;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .status-dot.done { background: #66bb6a; }
+    .status-dot.error { background: #ef5350; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(79, 195, 247, 0.4); }
+      50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(79, 195, 247, 0); }
+    }
+
+    .status-text {
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+    }
+
+    .status-text.idle { color: #555; }
+    .status-text.running { color: #4fc3f7; }
+    .status-text.done { color: #66bb6a; }
+    .status-text.error { color: #ef5350; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <span class="header-title">Microsoft Rewards</span>
+    <button class="refresh-btn" id="refresh-btn" title="Refresh rewards info">&#x21bb;</button>
+  </div>
+
+  <!-- Points -->
+  <div class="points-section">
+    <div class="points-star">&#9733;</div>
+    <div class="points-value empty" id="points-value">--</div>
+    <div class="points-label">points</div>
+  </div>
+
+  <!-- Progress bars -->
+  <div class="progress-section">
+    <div class="progress-row">
+      <div class="progress-label">
+        <span class="progress-name">PC searches</span>
+        <span class="progress-count" id="pc-count">-- / --</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill pc" id="pc-fill" style="width: 0%"></div>
+      </div>
+    </div>
+    <div class="progress-row">
+      <div class="progress-label">
+        <span class="progress-name">Mobile searches</span>
+        <span class="progress-count" id="mobile-count">-- / --</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill mobile" id="mobile-fill" style="width: 0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Options -->
+  <div class="options-section">
+    <div class="options-card">
+      <label>
+        <input type="checkbox" id="cb-pc" checked>
+        PC (35)
+      </label>
+      <label>
+        <input type="checkbox" id="cb-mobile" checked>
+        Mobile (20)
+      </label>
+    </div>
+  </div>
+
+  <!-- Action button -->
+  <div class="action-section">
+    <button class="action-btn start" id="action-btn">
+      <span>&#9654;</span> Start
+    </button>
+  </div>
+
+  <!-- Status -->
+  <div class="status-section">
+    <div class="status-dot idle" id="status-dot"></div>
+    <span class="status-text idle" id="status-text">Idle</span>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
