@@ -12,9 +12,7 @@ import type { BotState, PopupToWorkerMessage, SearchMode } from "./types";
 import { randomInt } from "./utils";
 
 const PC_USER_AGENT =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0";
-const MOBILE_USER_AGENT =
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1";
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
 
 // --- Main search logic ---
 
@@ -22,34 +20,11 @@ async function performNextSearch(): Promise<void> {
   const state = await getState();
   if (!state.isRunning) return;
 
-  // If current mode is done, move to next mode
   if (state.currentIndex >= state.total) {
-    const nextModeIndex = state.currentModeIndex + 1;
-    if (nextModeIndex >= state.modes.length) {
-      await stopSearches();
-      return;
-    }
-
-    // Move to next mode
-    const nextMode = state.modes[nextModeIndex];
-    const nextTotal = await getRemainingSearches(nextMode);
-    state.currentModeIndex = nextModeIndex;
-    state.mode = nextMode;
-    state.currentIndex = 0;
-    state.total = nextTotal;
-    await setState(state);
-
-    const label = nextMode === "pc" ? "PC" : "Mobile";
-    await logActivity("info", `Switching to ${label} searches (${nextTotal} remaining)`);
-
-    // Skip this mode too if already complete
-    if (nextTotal === 0) {
-      await performNextSearch();
-      return;
-    }
+    await stopSearches();
+    return;
   }
 
-  const mode = state.modes[state.currentModeIndex];
   const terms = await getSearchTerms();
   const termIndex = state.currentIndex % terms.length;
   const searchTerm = terms[termIndex];
@@ -57,23 +32,9 @@ async function performNextSearch(): Promise<void> {
   try {
     const tabId = await ensureTab(state);
 
-    // Set user agent for the current mode
-    if (mode === "mobile") {
-      await cdpSend(tabId, "Emulation.setUserAgentOverride", {
-        userAgent: MOBILE_USER_AGENT,
-      });
-      await cdpSend(tabId, "Emulation.setDeviceMetricsOverride", {
-        width: 375,
-        height: 812,
-        deviceScaleFactor: 3,
-        mobile: true,
-      });
-    } else {
-      await cdpSend(tabId, "Emulation.setUserAgentOverride", {
-        userAgent: PC_USER_AGENT,
-      });
-      await cdpSend(tabId, "Emulation.clearDeviceMetricsOverride");
-    }
+    await cdpSend(tabId, "Emulation.setUserAgentOverride", {
+      userAgent: PC_USER_AGENT,
+    });
 
     // Focus and select existing text in the search box
     await cdpSend(tabId, "Runtime.evaluate", {
@@ -109,8 +70,7 @@ async function performNextSearch(): Promise<void> {
     });
     if (!updatedState.isRunning) return;
 
-    const modeLabel = mode === "pc" ? "PC" : "Mobile";
-    await logActivity("info", `Searched: "${searchTerm}" (${updatedState.currentIndex}/${updatedState.total} ${modeLabel})`);
+    await logActivity("info", `Searched: "${searchTerm}" (${updatedState.currentIndex}/${updatedState.total} PC)`);
 
     // Refresh rewards info after each search
     fetchRewardsInfo().catch((e) => console.warn("[MSR] Background rewards refresh failed:", e));
@@ -139,28 +99,25 @@ async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActiv
   // Fetch rewards info before starting
   await fetchRewardsInfo();
 
-  // Filter out modes that are already complete
-  const modesWithRemaining: { mode: SearchMode; remaining: number }[] = [];
-  for (const mode of modes) {
-    const remaining = await getRemainingSearches(mode);
-    if (remaining > 0) {
-      modesWithRemaining.push({ mode, remaining });
-    } else {
-      logActivity("info", `Skipping ${mode} searches — already complete`);
+  // Check remaining PC searches
+  const pcRequested = modes.includes("pc");
+  let remaining = 0;
+  if (pcRequested) {
+    remaining = await getRemainingSearches();
+    if (remaining === 0) {
+      logActivity("info", "Skipping PC searches — already complete");
     }
   }
 
   // Nothing to do at all
-  if (modesWithRemaining.length === 0 && !dailyCards && !moreActivities && !exploreBing) {
-    logActivity("info", "All selected search modes are already complete");
+  if (remaining === 0 && !dailyCards && !moreActivities && !exploreBing) {
+    logActivity("info", "All selected tasks are already complete");
     await setState({
       ...getDefaultState(),
       error: "All searches already complete!",
     });
     return;
   }
-
-  const activeModes = modesWithRemaining.map((m) => m.mode);
 
   // Find or create a Bing tab
   const tabs = await chrome.tabs.query({ url: "https://*.bing.com/*" });
@@ -201,13 +158,12 @@ async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActiv
     checkReady();
   });
 
-  const firstMode = activeModes[0] ?? "pc";
   const state: BotState = {
     isRunning: true,
-    mode: firstMode,
+    mode: "pc",
     currentIndex: 0,
-    total: modesWithRemaining[0]?.remaining ?? 0,
-    modes: activeModes,
+    total: remaining,
+    modes: ["pc"],
     currentModeIndex: 0,
     tabId,
     groupId,
@@ -290,17 +246,15 @@ async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActiv
     }
   }
 
-  // If there are search modes to run, continue with alarm-based flow
-  if (activeModes.length > 0) {
+  // If PC searches are needed, continue with alarm-based flow
+  if (remaining > 0) {
     // Navigate back to Bing for searches
     if (hasCardPhases) {
       await cdpSend(tabId, "Page.navigate", { url: "https://www.bing.com" });
       await waitForPageLoad(tabId);
     }
 
-    // Fire first search via alarm to avoid blocking
-    const firstLabel = firstMode === "pc" ? "PC" : "Mobile";
-    await logActivity("info", `Starting ${firstLabel} search phase (${modesWithRemaining[0]?.remaining ?? 0} searches)`);
+    await logActivity("info", `Starting PC search phase (${remaining} searches)`);
     chrome.alarms.create("next-search", { delayInMinutes: 0.01 });
   } else {
     // Only card phases were requested, we're done

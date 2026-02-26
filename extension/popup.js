@@ -7,7 +7,6 @@ function getElement(id, ctor) {
   return el;
 }
 var cbPc = getElement("cb-pc", HTMLInputElement);
-var cbMobile = getElement("cb-mobile", HTMLInputElement);
 var cbDailyCards = getElement("cb-daily-cards", HTMLInputElement);
 var cbMoreActivities = getElement("cb-more-activities", HTMLInputElement);
 var cbExploreBing = getElement("cb-explore-bing", HTMLInputElement);
@@ -17,8 +16,6 @@ var statusText = getElement("status-text", HTMLSpanElement);
 var pointsValue = getElement("points-value", HTMLDivElement);
 var pcCount = getElement("pc-count", HTMLSpanElement);
 var pcFill = getElement("pc-fill", HTMLDivElement);
-var mobileCount = getElement("mobile-count", HTMLSpanElement);
-var mobileFill = getElement("mobile-fill", HTMLDivElement);
 var dailyCardsRow = getElement("daily-cards-row", HTMLDivElement);
 var dailyCardsCount = getElement("daily-cards-count", HTMLSpanElement);
 var dailyCardsFill = getElement("daily-cards-fill", HTMLDivElement);
@@ -57,7 +54,6 @@ function updateActionButton(running) {
 }
 function updateCheckboxes(disabled) {
   cbPc.disabled = disabled;
-  cbMobile.disabled = disabled;
   cbDailyCards.disabled = disabled;
   cbMoreActivities.disabled = disabled;
   cbExploreBing.disabled = disabled;
@@ -74,9 +70,6 @@ function updateRewardsUI(info) {
   }
   if (info.pcProgress) {
     updateProgressBar(pcCount, pcFill, info.pcProgress.current, info.pcProgress.target);
-  }
-  if (info.mobileProgress) {
-    updateProgressBar(mobileCount, mobileFill, info.mobileProgress.current, info.mobileProgress.target);
   }
   if (info.dailyCardsProgress) {
     updateProgressBar(dailyCardsCount, dailyCardsFill, info.dailyCardsProgress.current, info.dailyCardsProgress.target);
@@ -115,8 +108,7 @@ function updateBotUI(state) {
       const { currentCard, totalCards } = state.exploreBing;
       setStatus("running", `Explore Bing ${currentCard}/${totalCards}`);
     } else {
-      const modeLabel = state.mode === "pc" ? "PC" : "Mobile";
-      setStatus("running", `${modeLabel} ${state.currentIndex}/${state.total}`);
+      setStatus("running", `PC ${state.currentIndex}/${state.total}`);
     }
   } else if (state.error === "All searches already complete!") {
     updateActionButton(false);
@@ -184,11 +176,10 @@ function updateStartButtonState() {
     actionBtn.disabled = false;
     return;
   }
-  const anyChecked = cbPc.checked || cbMobile.checked || cbDailyCards.checked || cbMoreActivities.checked || cbExploreBing.checked;
+  const anyChecked = cbPc.checked || cbDailyCards.checked || cbMoreActivities.checked || cbExploreBing.checked;
   actionBtn.disabled = !anyChecked;
 }
 cbPc.addEventListener("change", updateStartButtonState);
-cbMobile.addEventListener("change", updateStartButtonState);
 cbDailyCards.addEventListener("change", updateStartButtonState);
 cbMoreActivities.addEventListener("change", updateStartButtonState);
 cbExploreBing.addEventListener("change", updateStartButtonState);
@@ -237,8 +228,6 @@ actionBtn.addEventListener("click", () => {
   const modes = [];
   if (cbPc.checked)
     modes.push("pc");
-  if (cbMobile.checked)
-    modes.push("mobile");
   const dailyCards = cbDailyCards.checked;
   const moreActivities = cbMoreActivities.checked;
   const exploreBing = cbExploreBing.checked;

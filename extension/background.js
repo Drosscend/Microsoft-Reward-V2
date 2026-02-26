@@ -501,7 +501,6 @@ async function simulateHumanBehavior(tabId) {
 
 // src/rewards.ts
 var FALLBACK_PC_SEARCHES = 30;
-var FALLBACK_MOBILE_SEARCHES = 20;
 var POINTS_PER_SEARCH = 3;
 function getUserLanguage(promos) {
   for (const p of promos) {
@@ -652,14 +651,14 @@ async function fetchCardFilters() {
     return { dailyCards: [], moreActivities: [], exploreBing: [] };
   }
 }
-async function getRemainingSearches(mode) {
+async function getRemainingSearches() {
   const result = await chrome.storage.session.get("rewardsInfo");
   const info = result.rewardsInfo;
   if (!info)
-    return mode === "pc" ? FALLBACK_PC_SEARCHES : FALLBACK_MOBILE_SEARCHES;
-  const progress = mode === "pc" ? info.pcProgress : info.mobileProgress;
+    return FALLBACK_PC_SEARCHES;
+  const progress = info.pcProgress;
   if (!progress)
-    return mode === "pc" ? FALLBACK_PC_SEARCHES : FALLBACK_MOBILE_SEARCHES;
+    return FALLBACK_PC_SEARCHES;
   const remainingPoints = progress.target - progress.current;
   if (remainingPoints <= 0)
     return 0;
@@ -781,31 +780,50 @@ var SEARCH_TERMS = [
 ];
 
 // src/terms.ts
-var GOOGLE_TRENDS_RSS = "https://trends.google.fr/trends/trendingsearches/daily/rss?geo=FR";
+var GOOGLE_TRENDS_FEEDS = [
+  "https://trends.google.com/trending/rss?geo=FR",
+  "https://trends.google.com/trending/rss?geo=US",
+  "https://trends.google.com/trending/rss?geo=GB"
+];
 var TITLE_REGEX = /<title>([^<]+)<\/title>/;
+function parseTrendingTitles(xml) {
+  const titles = [];
+  const itemRegex = /<item>[\s\S]*?<\/item>/g;
+  let match;
+  while ((match = itemRegex.exec(xml)) !== null) {
+    const titleMatch = match[0].match(TITLE_REGEX);
+    if (titleMatch?.[1]) {
+      titles.push(titleMatch[1].trim());
+    }
+  }
+  return titles;
+}
 async function fetchTrendingTerms() {
-  try {
-    const resp = await fetch(GOOGLE_TRENDS_RSS);
+  const results = await Promise.allSettled(GOOGLE_TRENDS_FEEDS.map(async (url) => {
+    const resp = await fetch(url);
     if (!resp.ok)
       throw new Error(`HTTP ${resp.status}`);
-    const xml = await resp.text();
-    const titles = [];
-    const itemRegex = /<item>[\s\S]*?<\/item>/g;
-    let match;
-    while ((match = itemRegex.exec(xml)) !== null) {
-      const titleMatch = match[0].match(TITLE_REGEX);
-      if (titleMatch?.[1]) {
-        titles.push(titleMatch[1].trim());
+    return parseTrendingTitles(await resp.text());
+  }));
+  const seen = new Set;
+  const titles = [];
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      for (const title of result.value) {
+        const key = title.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          titles.push(title);
+        }
       }
+    } else {
+      console.warn("[MSR] Failed to fetch one trending feed:", result.reason);
     }
-    if (titles.length > 0) {
-      logActivity("info", `Fetched ${titles.length} trending terms from Google Trends`);
-      return titles;
-    }
-  } catch (error) {
-    console.warn("[MSR] Failed to fetch trending terms:", error);
   }
-  return [];
+  if (titles.length > 0) {
+    logActivity("info", `Fetched ${titles.length} trending terms from Google Trends`);
+  }
+  return titles;
 }
 async function getSearchTerms() {
   const cached = await chrome.storage.session.get("searchTerms");
@@ -829,54 +847,23 @@ async function getSearchTerms() {
 }
 
 // src/background.ts
-var PC_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0";
-var MOBILE_USER_AGENT = "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1";
+var PC_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
 async function performNextSearch() {
   const state = await getState();
   if (!state.isRunning)
     return;
   if (state.currentIndex >= state.total) {
-    const nextModeIndex = state.currentModeIndex + 1;
-    if (nextModeIndex >= state.modes.length) {
-      await stopSearches();
-      return;
-    }
-    const nextMode = state.modes[nextModeIndex];
-    const nextTotal = await getRemainingSearches(nextMode);
-    state.currentModeIndex = nextModeIndex;
-    state.mode = nextMode;
-    state.currentIndex = 0;
-    state.total = nextTotal;
-    await setState(state);
-    const label = nextMode === "pc" ? "PC" : "Mobile";
-    await logActivity("info", `Switching to ${label} searches (${nextTotal} remaining)`);
-    if (nextTotal === 0) {
-      await performNextSearch();
-      return;
-    }
+    await stopSearches();
+    return;
   }
-  const mode = state.modes[state.currentModeIndex];
   const terms = await getSearchTerms();
   const termIndex = state.currentIndex % terms.length;
   const searchTerm = terms[termIndex];
   try {
     const tabId = await ensureTab(state);
-    if (mode === "mobile") {
-      await cdpSend(tabId, "Emulation.setUserAgentOverride", {
-        userAgent: MOBILE_USER_AGENT
-      });
-      await cdpSend(tabId, "Emulation.setDeviceMetricsOverride", {
-        width: 375,
-        height: 812,
-        deviceScaleFactor: 3,
-        mobile: true
-      });
-    } else {
-      await cdpSend(tabId, "Emulation.setUserAgentOverride", {
-        userAgent: PC_USER_AGENT
-      });
-      await cdpSend(tabId, "Emulation.clearDeviceMetricsOverride");
-    }
+    await cdpSend(tabId, "Emulation.setUserAgentOverride", {
+      userAgent: PC_USER_AGENT
+    });
     await cdpSend(tabId, "Runtime.evaluate", {
       expression: `(() => {
         const input = document.querySelector("#sb_form_q");
@@ -898,8 +885,7 @@ async function performNextSearch() {
     });
     if (!updatedState.isRunning)
       return;
-    const modeLabel = mode === "pc" ? "PC" : "Mobile";
-    await logActivity("info", `Searched: "${searchTerm}" (${updatedState.currentIndex}/${updatedState.total} ${modeLabel})`);
+    await logActivity("info", `Searched: "${searchTerm}" (${updatedState.currentIndex}/${updatedState.total} PC)`);
     fetchRewardsInfo().catch((e) => console.warn("[MSR] Background rewards refresh failed:", e));
     const delayMinutes = randomInt(3, 6) / 60;
     chrome.alarms.create("next-search", { delayInMinutes: delayMinutes });
@@ -920,24 +906,22 @@ async function startSearches(modes, dailyCards, moreActivities, exploreBing) {
   await chrome.storage.session.remove("searchTerms");
   await getSearchTerms();
   await fetchRewardsInfo();
-  const modesWithRemaining = [];
-  for (const mode of modes) {
-    const remaining = await getRemainingSearches(mode);
-    if (remaining > 0) {
-      modesWithRemaining.push({ mode, remaining });
-    } else {
-      logActivity("info", `Skipping ${mode} searches — already complete`);
+  const pcRequested = modes.includes("pc");
+  let remaining = 0;
+  if (pcRequested) {
+    remaining = await getRemainingSearches();
+    if (remaining === 0) {
+      logActivity("info", "Skipping PC searches — already complete");
     }
   }
-  if (modesWithRemaining.length === 0 && !dailyCards && !moreActivities && !exploreBing) {
-    logActivity("info", "All selected search modes are already complete");
+  if (remaining === 0 && !dailyCards && !moreActivities && !exploreBing) {
+    logActivity("info", "All selected tasks are already complete");
     await setState({
       ...getDefaultState(),
       error: "All searches already complete!"
     });
     return;
   }
-  const activeModes = modesWithRemaining.map((m) => m.mode);
   const tabs = await chrome.tabs.query({ url: "https://*.bing.com/*" });
   let tabId;
   if (tabs.length > 0 && tabs[0].id) {
@@ -968,13 +952,12 @@ async function startSearches(modes, dailyCards, moreActivities, exploreBing) {
     };
     checkReady();
   });
-  const firstMode = activeModes[0] ?? "pc";
   const state = {
     isRunning: true,
-    mode: firstMode,
+    mode: "pc",
     currentIndex: 0,
-    total: modesWithRemaining[0]?.remaining ?? 0,
-    modes: activeModes,
+    total: remaining,
+    modes: ["pc"],
     currentModeIndex: 0,
     tabId,
     groupId
@@ -1036,13 +1019,12 @@ async function startSearches(modes, dailyCards, moreActivities, exploreBing) {
       }));
     }
   }
-  if (activeModes.length > 0) {
+  if (remaining > 0) {
     if (hasCardPhases) {
       await cdpSend(tabId, "Page.navigate", { url: "https://www.bing.com" });
       await waitForPageLoad(tabId);
     }
-    const firstLabel = firstMode === "pc" ? "PC" : "Mobile";
-    await logActivity("info", `Starting ${firstLabel} search phase (${modesWithRemaining[0]?.remaining ?? 0} searches)`);
+    await logActivity("info", `Starting PC search phase (${remaining} searches)`);
     chrome.alarms.create("next-search", { delayInMinutes: 0.01 });
   } else {
     await stopSearches();

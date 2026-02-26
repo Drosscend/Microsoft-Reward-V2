@@ -4,37 +4,58 @@ import { logActivity } from "./logger";
 import { SEARCH_TERMS as STATIC_TERMS } from "./search-terms";
 import { shuffle } from "./utils";
 
-const GOOGLE_TRENDS_RSS =
-  "https://trends.google.fr/trends/trendingsearches/daily/rss?geo=FR";
+// Multiple geo feeds to get more trending terms (~10 per feed)
+const GOOGLE_TRENDS_FEEDS = [
+  "https://trends.google.com/trending/rss?geo=FR",
+  "https://trends.google.com/trending/rss?geo=US",
+  "https://trends.google.com/trending/rss?geo=GB",
+];
 
 const TITLE_REGEX = /<title>([^<]+)<\/title>/;
 
+function parseTrendingTitles(xml: string): string[] {
+  const titles: string[] = [];
+  const itemRegex = /<item>[\s\S]*?<\/item>/g;
+  let match: RegExpExecArray | null;
+  while ((match = itemRegex.exec(xml)) !== null) {
+    const titleMatch = match[0].match(TITLE_REGEX);
+    if (titleMatch?.[1]) {
+      titles.push(titleMatch[1].trim());
+    }
+  }
+  return titles;
+}
+
 async function fetchTrendingTerms(): Promise<string[]> {
-  try {
-    const resp = await fetch(GOOGLE_TRENDS_RSS);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const results = await Promise.allSettled(
+    GOOGLE_TRENDS_FEEDS.map(async (url) => {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return parseTrendingTitles(await resp.text());
+    }),
+  );
 
-    const xml = await resp.text();
+  const seen = new Set<string>();
+  const titles: string[] = [];
 
-    const titles: string[] = [];
-    const itemRegex = /<item>[\s\S]*?<\/item>/g;
-    let match: RegExpExecArray | null;
-    while ((match = itemRegex.exec(xml)) !== null) {
-      const titleMatch = match[0].match(TITLE_REGEX);
-      if (titleMatch?.[1]) {
-        titles.push(titleMatch[1].trim());
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      for (const title of result.value) {
+        const key = title.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          titles.push(title);
+        }
       }
+    } else {
+      console.warn("[MSR] Failed to fetch one trending feed:", result.reason);
     }
-
-    if (titles.length > 0) {
-      logActivity("info", `Fetched ${titles.length} trending terms from Google Trends`);
-      return titles;
-    }
-  } catch (error) {
-    console.warn("[MSR] Failed to fetch trending terms:", error);
   }
 
-  return [];
+  if (titles.length > 0) {
+    logActivity("info", `Fetched ${titles.length} trending terms from Google Trends`);
+  }
+  return titles;
 }
 
 export async function getSearchTerms(): Promise<string[]> {

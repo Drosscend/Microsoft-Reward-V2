@@ -1,10 +1,9 @@
 // Microsoft Rewards API interaction
 
 import { logActivity } from "./logger";
-import type { CardFilters, RewardsInfo, SearchMode } from "./types";
+import type { CardFilters, RewardsInfo } from "./types";
 
 const FALLBACK_PC_SEARCHES = 30;
-const FALLBACK_MOBILE_SEARCHES = 20;
 const POINTS_PER_SEARCH = 3;
 
 interface Promotion {
@@ -192,13 +191,13 @@ export async function fetchCardFilters(): Promise<CardFilters> {
   }
 }
 
-export async function getRemainingSearches(mode: SearchMode): Promise<number> {
+export async function getRemainingSearches(): Promise<number> {
   const result = await chrome.storage.session.get("rewardsInfo");
   const info = result.rewardsInfo as RewardsInfo | undefined;
-  if (!info) return mode === "pc" ? FALLBACK_PC_SEARCHES : FALLBACK_MOBILE_SEARCHES;
+  if (!info) return FALLBACK_PC_SEARCHES;
 
-  const progress = mode === "pc" ? info.pcProgress : info.mobileProgress;
-  if (!progress) return mode === "pc" ? FALLBACK_PC_SEARCHES : FALLBACK_MOBILE_SEARCHES;
+  const progress = info.pcProgress;
+  if (!progress) return FALLBACK_PC_SEARCHES;
 
   const remainingPoints = progress.target - progress.current;
   if (remainingPoints <= 0) return 0;
