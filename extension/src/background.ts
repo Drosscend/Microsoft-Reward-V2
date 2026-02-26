@@ -1,8 +1,10 @@
 // Service worker: orchestration via chrome.debugger CDP
 
 import { cdpSend, typeText, pressEnter, pressKey, waitForPageLoad } from "./cdp";
+import { performDailyCards, performExploreBing, performMoreActivities } from "./daily-cards";
 import { simulateHumanBehavior } from "./human-behavior";
-import { fetchRewardsInfo, getRemainingSearches } from "./rewards";
+import { clearActivityLog, logActivity } from "./logger";
+import { fetchCardFilters, fetchRewardsInfo, getRemainingSearches } from "./rewards";
 import { getDefaultState, getState, setState, updateState } from "./state";
 import { ensureTab } from "./tab-manager";
 import { getSearchTerms } from "./terms";
@@ -36,6 +38,9 @@ async function performNextSearch(): Promise<void> {
     state.currentIndex = 0;
     state.total = nextTotal;
     await setState(state);
+
+    const label = nextMode === "pc" ? "PC" : "Mobile";
+    await logActivity("info", `Switching to ${label} searches (${nextTotal} remaining)`);
 
     // Skip this mode too if already complete
     if (nextTotal === 0) {
@@ -104,6 +109,9 @@ async function performNextSearch(): Promise<void> {
     });
     if (!updatedState.isRunning) return;
 
+    const modeLabel = mode === "pc" ? "PC" : "Mobile";
+    await logActivity("info", `Searched: "${searchTerm}" (${updatedState.currentIndex}/${updatedState.total} ${modeLabel})`);
+
     // Refresh rewards info after each search
     fetchRewardsInfo().catch((e) => console.warn("[MSR] Background rewards refresh failed:", e));
 
@@ -111,7 +119,7 @@ async function performNextSearch(): Promise<void> {
     const delayMinutes = randomInt(3, 6) / 60;
     chrome.alarms.create("next-search", { delayInMinutes: delayMinutes });
   } catch (error) {
-    console.error(`[MSR] Error during search "${searchTerm}":`, error);
+    logActivity("error", `Search error: "${searchTerm}" — ${error}`);
     // Continue to next search despite error
     const updatedState = await updateState((s) => {
       if (!s.isRunning) return s;
@@ -123,7 +131,7 @@ async function performNextSearch(): Promise<void> {
   }
 }
 
-async function startSearches(modes: SearchMode[]): Promise<void> {
+async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActivities: boolean, exploreBing: boolean): Promise<void> {
   // Clear cached terms so we get fresh trending topics
   await chrome.storage.session.remove("searchTerms");
   await getSearchTerms();
@@ -138,13 +146,13 @@ async function startSearches(modes: SearchMode[]): Promise<void> {
     if (remaining > 0) {
       modesWithRemaining.push({ mode, remaining });
     } else {
-      console.log(`[MSR] Skipping ${mode} searches — already complete`);
+      logActivity("info", `Skipping ${mode} searches — already complete`);
     }
   }
 
-  // Nothing to do
-  if (modesWithRemaining.length === 0) {
-    console.log("[MSR] All selected search modes are already complete");
+  // Nothing to do at all
+  if (modesWithRemaining.length === 0 && !dailyCards && !moreActivities && !exploreBing) {
+    logActivity("info", "All selected search modes are already complete");
     await setState({
       ...getDefaultState(),
       error: "All searches already complete!",
@@ -193,12 +201,12 @@ async function startSearches(modes: SearchMode[]): Promise<void> {
     checkReady();
   });
 
-  const firstMode = activeModes[0];
+  const firstMode = activeModes[0] ?? "pc";
   const state: BotState = {
     isRunning: true,
     mode: firstMode,
     currentIndex: 0,
-    total: modesWithRemaining[0].remaining,
+    total: modesWithRemaining[0]?.remaining ?? 0,
     modes: activeModes,
     currentModeIndex: 0,
     tabId,
@@ -207,8 +215,97 @@ async function startSearches(modes: SearchMode[]): Promise<void> {
 
   await setState(state);
 
-  // Fire first search via alarm to avoid blocking
-  chrome.alarms.create("next-search", { delayInMinutes: 0.01 });
+  await logActivity("info", "Bot started");
+
+  // Fetch API-based card filters (skip completed + zero-point cards)
+  const cardFilters = (dailyCards || moreActivities || exploreBing) ? await fetchCardFilters() : null;
+
+  // Run reward card phases synchronously before searches
+  const hasCardPhases = dailyCards || moreActivities || exploreBing;
+
+  if (dailyCards) {
+    const indices = cardFilters?.dailyCards ?? [];
+    await updateState((s) => ({
+      ...s,
+      dailyCards: { isActive: true, currentCard: 0, totalCards: indices.length },
+    }));
+
+    try {
+      await performDailyCards(tabId, indices);
+    } catch (error) {
+      logActivity("error", `Daily cards phase failed: ${error}`);
+      await updateState((s) => ({
+        ...s,
+        dailyCards: s.dailyCards
+          ? { ...s.dailyCards, isActive: false }
+          : { isActive: false, currentCard: 0, totalCards: 0 },
+      }));
+    }
+  }
+
+  // Navigate to rewards page once for all card phases that need it
+  const needsRewardsNav = moreActivities || exploreBing;
+  if (needsRewardsNav && !dailyCards) {
+    await cdpSend(tabId, "Page.navigate", { url: "https://rewards.bing.com" });
+    await waitForPageLoad(tabId);
+  }
+
+  if (moreActivities) {
+    const names = cardFilters?.moreActivities ?? [];
+    await updateState((s) => ({
+      ...s,
+      moreActivities: { isActive: true, currentCard: 0, totalCards: names.length },
+    }));
+
+    try {
+      await performMoreActivities(tabId, names);
+    } catch (error) {
+      logActivity("error", `More activities phase failed: ${error}`);
+      await updateState((s) => ({
+        ...s,
+        moreActivities: s.moreActivities
+          ? { ...s.moreActivities, isActive: false }
+          : { isActive: false, currentCard: 0, totalCards: 0 },
+      }));
+    }
+  }
+
+  if (exploreBing) {
+    const names = cardFilters?.exploreBing ?? [];
+    await updateState((s) => ({
+      ...s,
+      exploreBing: { isActive: true, currentCard: 0, totalCards: names.length },
+    }));
+
+    try {
+      await performExploreBing(tabId, names);
+    } catch (error) {
+      logActivity("error", `Explore Bing phase failed: ${error}`);
+      await updateState((s) => ({
+        ...s,
+        exploreBing: s.exploreBing
+          ? { ...s.exploreBing, isActive: false }
+          : { isActive: false, currentCard: 0, totalCards: 0 },
+      }));
+    }
+  }
+
+  // If there are search modes to run, continue with alarm-based flow
+  if (activeModes.length > 0) {
+    // Navigate back to Bing for searches
+    if (hasCardPhases) {
+      await cdpSend(tabId, "Page.navigate", { url: "https://www.bing.com" });
+      await waitForPageLoad(tabId);
+    }
+
+    // Fire first search via alarm to avoid blocking
+    const firstLabel = firstMode === "pc" ? "PC" : "Mobile";
+    await logActivity("info", `Starting ${firstLabel} search phase (${modesWithRemaining[0]?.remaining ?? 0} searches)`);
+    chrome.alarms.create("next-search", { delayInMinutes: 0.01 });
+  } else {
+    // Only card phases were requested, we're done
+    await stopSearches();
+  }
 }
 
 async function stopSearches(): Promise<void> {
@@ -223,6 +320,7 @@ async function stopSearches(): Promise<void> {
   }
 
   await chrome.alarms.clear("next-search");
+  await logActivity("info", "Bot stopped");
   await setState(getDefaultState());
 
   // Fetch updated rewards info after completion
@@ -234,7 +332,7 @@ async function stopSearches(): Promise<void> {
 chrome.runtime.onMessage.addListener(
   (message: PopupToWorkerMessage, _sender, sendResponse) => {
     if (message.action === "start") {
-      startSearches(message.modes)
+      startSearches(message.modes, message.dailyCards, message.moreActivities, message.exploreBing)
         .then(() => sendResponse({ ok: true }))
         .catch((err) => sendResponse({ ok: false, error: String(err) }));
       return true;
@@ -253,6 +351,13 @@ chrome.runtime.onMessage.addListener(
         .catch((err) => sendResponse({ ok: false, error: String(err) }));
       return true;
     }
+
+    if (message.action === "clear-log") {
+      clearActivityLog()
+        .then(() => sendResponse({ ok: true }))
+        .catch((err) => sendResponse({ ok: false, error: String(err) }));
+      return true;
+    }
   },
 );
 
@@ -265,7 +370,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.debugger.onDetach.addListener(async (source) => {
   const state = await getState();
   if (state.isRunning && source.tabId === state.tabId) {
-    console.warn("[MSR] Debugger detached unexpectedly, stopping.");
+    await logActivity("warn", "Debugger detached unexpectedly, stopping");
     await chrome.alarms.clear("next-search");
     await setState({ ...state, isRunning: false, error: "Debugger detached" });
   }

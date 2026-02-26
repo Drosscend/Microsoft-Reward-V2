@@ -8,6 +8,9 @@ function getElement(id, ctor) {
 }
 var cbPc = getElement("cb-pc", HTMLInputElement);
 var cbMobile = getElement("cb-mobile", HTMLInputElement);
+var cbDailyCards = getElement("cb-daily-cards", HTMLInputElement);
+var cbMoreActivities = getElement("cb-more-activities", HTMLInputElement);
+var cbExploreBing = getElement("cb-explore-bing", HTMLInputElement);
 var actionBtn = getElement("action-btn", HTMLButtonElement);
 var statusDot = getElement("status-dot", HTMLDivElement);
 var statusText = getElement("status-text", HTMLSpanElement);
@@ -16,7 +19,22 @@ var pcCount = getElement("pc-count", HTMLSpanElement);
 var pcFill = getElement("pc-fill", HTMLDivElement);
 var mobileCount = getElement("mobile-count", HTMLSpanElement);
 var mobileFill = getElement("mobile-fill", HTMLDivElement);
+var dailyCardsRow = getElement("daily-cards-row", HTMLDivElement);
+var dailyCardsCount = getElement("daily-cards-count", HTMLSpanElement);
+var dailyCardsFill = getElement("daily-cards-fill", HTMLDivElement);
+var moreActivitiesRow = getElement("more-activities-row", HTMLDivElement);
+var moreActivitiesCount = getElement("more-activities-count", HTMLSpanElement);
+var moreActivitiesFill = getElement("more-activities-fill", HTMLDivElement);
+var exploreBingRow = getElement("explore-bing-row", HTMLDivElement);
+var exploreBingCount = getElement("explore-bing-count", HTMLSpanElement);
+var exploreBingFill = getElement("explore-bing-fill", HTMLDivElement);
 var refreshBtn = getElement("refresh-btn", HTMLButtonElement);
+var logHeader = getElement("log-header", HTMLDivElement);
+var logChevron = getElement("log-chevron", HTMLSpanElement);
+var logBody = getElement("log-body", HTMLDivElement);
+var logEntries = getElement("log-entries", HTMLDivElement);
+var logEmpty = getElement("log-empty", HTMLDivElement);
+var logClearBtn = getElement("log-clear-btn", HTMLButtonElement);
 var isRunning = false;
 function formatPoints(n) {
   if (typeof n !== "number")
@@ -40,6 +58,14 @@ function updateActionButton(running) {
 function updateCheckboxes(disabled) {
   cbPc.disabled = disabled;
   cbMobile.disabled = disabled;
+  cbDailyCards.disabled = disabled;
+  cbMoreActivities.disabled = disabled;
+  cbExploreBing.disabled = disabled;
+}
+function updateProgressBar(countEl, fillEl, current, target) {
+  countEl.textContent = `${current} / ${target}`;
+  const pct = target > 0 ? Math.min(current / target * 100, 100) : 0;
+  fillEl.style.width = `${pct}%`;
 }
 function updateRewardsUI(info) {
   if (info.points !== null) {
@@ -47,25 +73,51 @@ function updateRewardsUI(info) {
     pointsValue.classList.remove("empty");
   }
   if (info.pcProgress) {
-    const { current, target } = info.pcProgress;
-    pcCount.textContent = `${current} / ${target}`;
-    const pct = target > 0 ? Math.min(current / target * 100, 100) : 0;
-    pcFill.style.width = `${pct}%`;
+    updateProgressBar(pcCount, pcFill, info.pcProgress.current, info.pcProgress.target);
   }
   if (info.mobileProgress) {
-    const { current, target } = info.mobileProgress;
-    mobileCount.textContent = `${current} / ${target}`;
-    const pct = target > 0 ? Math.min(current / target * 100, 100) : 0;
-    mobileFill.style.width = `${pct}%`;
+    updateProgressBar(mobileCount, mobileFill, info.mobileProgress.current, info.mobileProgress.target);
+  }
+  if (info.dailyCardsProgress) {
+    updateProgressBar(dailyCardsCount, dailyCardsFill, info.dailyCardsProgress.current, info.dailyCardsProgress.target);
+  }
+  if (info.moreActivitiesProgress) {
+    updateProgressBar(moreActivitiesCount, moreActivitiesFill, info.moreActivitiesProgress.current, info.moreActivitiesProgress.target);
+  }
+  if (info.exploreBingProgress) {
+    updateProgressBar(exploreBingCount, exploreBingFill, info.exploreBingProgress.current, info.exploreBingProgress.target);
+  }
+}
+function updateCardProgressUI(state) {
+  if (state.dailyCards) {
+    updateProgressBar(dailyCardsCount, dailyCardsFill, state.dailyCards.currentCard, state.dailyCards.totalCards);
+  }
+  if (state.moreActivities) {
+    updateProgressBar(moreActivitiesCount, moreActivitiesFill, state.moreActivities.currentCard, state.moreActivities.totalCards);
+  }
+  if (state.exploreBing) {
+    updateProgressBar(exploreBingCount, exploreBingFill, state.exploreBing.currentCard, state.exploreBing.totalCards);
   }
 }
 function updateBotUI(state) {
   isRunning = state.isRunning;
+  updateCardProgressUI(state);
   if (state.isRunning) {
     updateActionButton(true);
     updateCheckboxes(true);
-    const modeLabel = state.mode === "pc" ? "PC" : "Mobile";
-    setStatus("running", `${modeLabel} ${state.currentIndex}/${state.total}`);
+    if (state.dailyCards?.isActive) {
+      const { currentCard, totalCards } = state.dailyCards;
+      setStatus("running", `Daily Cards ${currentCard}/${totalCards}`);
+    } else if (state.moreActivities?.isActive) {
+      const { currentCard, totalCards } = state.moreActivities;
+      setStatus("running", `Activities ${currentCard}/${totalCards}`);
+    } else if (state.exploreBing?.isActive) {
+      const { currentCard, totalCards } = state.exploreBing;
+      setStatus("running", `Explore Bing ${currentCard}/${totalCards}`);
+    } else {
+      const modeLabel = state.mode === "pc" ? "PC" : "Mobile";
+      setStatus("running", `${modeLabel} ${state.currentIndex}/${state.total}`);
+    }
   } else if (state.error === "All searches already complete!") {
     updateActionButton(false);
     updateCheckboxes(false);
@@ -74,7 +126,7 @@ function updateBotUI(state) {
     updateActionButton(false);
     updateCheckboxes(false);
     setStatus("error", state.error);
-  } else if (state.currentIndex > 0) {
+  } else if (state.currentIndex > 0 || state.dailyCards || state.moreActivities || state.exploreBing) {
     updateActionButton(false);
     updateCheckboxes(false);
     setStatus("done", "Done");
@@ -83,7 +135,63 @@ function updateBotUI(state) {
     updateCheckboxes(false);
     setStatus("idle", "Idle");
   }
+  updateStartButtonState();
 }
+function formatTime(ts) {
+  const d = new Date(ts);
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+function renderFullLog(entries) {
+  while (logEntries.firstChild) {
+    logEntries.removeChild(logEntries.firstChild);
+  }
+  if (entries.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "log-empty";
+    empty.textContent = "No activity yet";
+    logEntries.appendChild(empty);
+    return;
+  }
+  for (const entry of entries) {
+    const row = document.createElement("div");
+    row.className = "log-entry";
+    const time = document.createElement("span");
+    time.className = "log-time";
+    time.textContent = formatTime(entry.timestamp);
+    const msg = document.createElement("span");
+    msg.className = `log-msg ${entry.level}`;
+    msg.textContent = entry.message;
+    msg.title = entry.message;
+    row.appendChild(time);
+    row.appendChild(msg);
+    logEntries.appendChild(row);
+  }
+  logEntries.scrollTop = logEntries.scrollHeight;
+}
+logHeader.addEventListener("click", (e) => {
+  if (e.target.id === "log-clear-btn")
+    return;
+  logBody.classList.toggle("open");
+  logChevron.classList.toggle("open");
+});
+logClearBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  sendMsg({ action: "clear-log" });
+  renderFullLog([]);
+});
+function updateStartButtonState() {
+  if (isRunning) {
+    actionBtn.disabled = false;
+    return;
+  }
+  const anyChecked = cbPc.checked || cbMobile.checked || cbDailyCards.checked || cbMoreActivities.checked || cbExploreBing.checked;
+  actionBtn.disabled = !anyChecked;
+}
+cbPc.addEventListener("change", updateStartButtonState);
+cbMobile.addEventListener("change", updateStartButtonState);
+cbDailyCards.addEventListener("change", updateStartButtonState);
+cbMoreActivities.addEventListener("change", updateStartButtonState);
+cbExploreBing.addEventListener("change", updateStartButtonState);
 function sendMsg(message, callback) {
   chrome.runtime.sendMessage(message, (response) => {
     if (chrome.runtime.lastError) {
@@ -92,13 +200,17 @@ function sendMsg(message, callback) {
     callback?.(response);
   });
 }
-chrome.storage.session.get(["botState", "rewardsInfo"], (result) => {
+chrome.storage.session.get(["botState", "rewardsInfo", "activityLog"], (result) => {
   const state = result.botState;
   if (state)
     updateBotUI(state);
   const info = result.rewardsInfo;
   if (info)
     updateRewardsUI(info);
+  const log = result.activityLog;
+  if (log)
+    renderFullLog(log);
+  updateStartButtonState();
 });
 refreshBtn.classList.add("loading");
 sendMsg({ action: "fetch-rewards" }, () => {
@@ -113,6 +225,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.rewardsInfo) {
     updateRewardsUI(changes.rewardsInfo.newValue);
   }
+  if (changes.activityLog) {
+    renderFullLog(changes.activityLog.newValue ?? []);
+  }
 });
 actionBtn.addEventListener("click", () => {
   if (isRunning) {
@@ -124,9 +239,12 @@ actionBtn.addEventListener("click", () => {
     modes.push("pc");
   if (cbMobile.checked)
     modes.push("mobile");
-  if (modes.length === 0)
+  const dailyCards = cbDailyCards.checked;
+  const moreActivities = cbMoreActivities.checked;
+  const exploreBing = cbExploreBing.checked;
+  if (modes.length === 0 && !dailyCards && !moreActivities && !exploreBing)
     return;
-  sendMsg({ action: "start", modes });
+  sendMsg({ action: "start", modes, dailyCards, moreActivities, exploreBing });
 });
 refreshBtn.addEventListener("click", () => {
   refreshBtn.classList.add("loading");

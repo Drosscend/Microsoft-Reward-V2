@@ -10,7 +10,8 @@
       font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
       background: #0f0f1a;
       color: #e0e0e0;
-      overflow: hidden;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
 
     /* --- Header --- */
@@ -23,11 +24,30 @@
       border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     }
 
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
     .header-title {
       font-size: 14px;
       font-weight: 600;
       color: #fff;
       letter-spacing: 0.3px;
+    }
+
+    .header-link {
+      font-size: 11px;
+      color: #0078d4;
+      text-decoration: none;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+    }
+
+    .header-link:hover {
+      opacity: 1;
+      text-decoration: underline;
     }
 
     .refresh-btn {
@@ -146,6 +166,18 @@
       background: linear-gradient(90deg, #7c3aed, #a78bfa);
     }
 
+    .progress-fill.daily-cards {
+      background: linear-gradient(90deg, #10b981, #34d399);
+    }
+
+    .progress-fill.more-activities {
+      background: linear-gradient(90deg, #f59e0b, #fbbf24);
+    }
+
+    .progress-fill.explore-bing {
+      background: linear-gradient(90deg, #ec4899, #f472b6);
+    }
+
     /* --- Checkboxes --- */
     .options-section {
       padding: 0 20px 16px;
@@ -153,7 +185,8 @@
 
     .options-card {
       display: flex;
-      gap: 12px;
+      flex-direction: column;
+      gap: 8px;
       padding: 10px 14px;
       border-radius: 10px;
       background: rgba(255, 255, 255, 0.04);
@@ -276,13 +309,129 @@
     .status-text.running { color: #4fc3f7; }
     .status-text.done { color: #66bb6a; }
     .status-text.error { color: #ef5350; }
+
+    /* --- Activity Log --- */
+    .log-section {
+      padding: 0 20px 16px;
+    }
+
+    .log-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+      padding: 8px 0;
+    }
+
+    .log-chevron {
+      font-size: 10px;
+      color: #888;
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+
+    .log-chevron.open {
+      transform: rotate(90deg);
+    }
+
+    .log-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #aaa;
+      letter-spacing: 0.3px;
+      flex: 1;
+    }
+
+    .log-clear-btn {
+      font-size: 11px;
+      color: #666;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    .log-clear-btn:hover {
+      color: #aaa;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .log-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid transparent;
+    }
+
+    .log-body.open {
+      max-height: 250px;
+      border-color: rgba(255, 255, 255, 0.06);
+    }
+
+    .log-entries {
+      max-height: 250px;
+      overflow-y: auto;
+      padding: 8px 10px;
+      font-family: "Cascadia Code", "Consolas", "Courier New", monospace;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .log-entries::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .log-entries::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .log-entries::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 2px;
+    }
+
+    .log-entry {
+      display: flex;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .log-time {
+      color: #555;
+      flex-shrink: 0;
+    }
+
+    .log-msg {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .log-msg.info { color: #aaa; }
+    .log-msg.warn { color: #f59e0b; }
+    .log-msg.error { color: #ef5350; }
+
+    .log-empty {
+      color: #444;
+      font-size: 11px;
+      text-align: center;
+      padding: 12px 0;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
 
   <!-- Header -->
   <div class="header">
-    <span class="header-title">Microsoft Rewards</span>
+    <div class="header-left">
+      <span class="header-title">Microsoft Rewards</span>
+      <a class="header-link" href="https://rewards.bing.com" target="_blank">rewards &#8599;</a>
+    </div>
     <button class="refresh-btn" id="refresh-btn" title="Refresh rewards info">&#x21bb;</button>
   </div>
 
@@ -313,6 +462,33 @@
         <div class="progress-fill mobile" id="mobile-fill" style="width: 0%"></div>
       </div>
     </div>
+    <div class="progress-row" id="daily-cards-row">
+      <div class="progress-label">
+        <span class="progress-name">Daily cards</span>
+        <span class="progress-count" id="daily-cards-count">-- / --</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill daily-cards" id="daily-cards-fill" style="width: 0%"></div>
+      </div>
+    </div>
+    <div class="progress-row" id="more-activities-row">
+      <div class="progress-label">
+        <span class="progress-name">More activities</span>
+        <span class="progress-count" id="more-activities-count">-- / --</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill more-activities" id="more-activities-fill" style="width: 0%"></div>
+      </div>
+    </div>
+    <div class="progress-row" id="explore-bing-row">
+      <div class="progress-label">
+        <span class="progress-name">Explore Bing</span>
+        <span class="progress-count" id="explore-bing-count">-- / --</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill explore-bing" id="explore-bing-fill" style="width: 0%"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Options -->
@@ -325,6 +501,18 @@
       <label>
         <input type="checkbox" id="cb-mobile" checked>
         Mobile (20)
+      </label>
+      <label>
+        <input type="checkbox" id="cb-daily-cards" checked>
+        Daily Cards
+      </label>
+      <label>
+        <input type="checkbox" id="cb-more-activities" checked>
+        More Activities
+      </label>
+      <label>
+        <input type="checkbox" id="cb-explore-bing" checked>
+        Explore Bing
       </label>
     </div>
   </div>
@@ -340,6 +528,20 @@
   <div class="status-section">
     <div class="status-dot idle" id="status-dot"></div>
     <span class="status-text idle" id="status-text">Idle</span>
+  </div>
+
+  <!-- Activity Log -->
+  <div class="log-section">
+    <div class="log-header" id="log-header">
+      <span class="log-chevron" id="log-chevron">&#9654;</span>
+      <span class="log-title">Activity Log</span>
+      <button class="log-clear-btn" id="log-clear-btn">Clear</button>
+    </div>
+    <div class="log-body" id="log-body">
+      <div class="log-entries" id="log-entries">
+        <div class="log-empty" id="log-empty">No activity yet</div>
+      </div>
+    </div>
   </div>
 
   <script src="popup.js"></script>

@@ -1,5 +1,6 @@
 // Search term management: trending + static fallback
 
+import { logActivity } from "./logger";
 import { SEARCH_TERMS as STATIC_TERMS } from "./search-terms";
 import { shuffle } from "./utils";
 
@@ -26,7 +27,7 @@ async function fetchTrendingTerms(): Promise<string[]> {
     }
 
     if (titles.length > 0) {
-      console.log(`[MSR] Fetched ${titles.length} trending terms from Google Trends`);
+      logActivity("info", `Fetched ${titles.length} trending terms from Google Trends`);
       return titles;
     }
   } catch (error) {
@@ -61,8 +62,9 @@ export async function getSearchTerms(): Promise<string[]> {
   const terms = shuffle(combined);
 
   await chrome.storage.session.set({ searchTerms: terms });
-  console.log(
-    `[MSR] Search terms ready: ${trending.length} trending + ${terms.length - trending.length} static = ${terms.length} total`,
+  await logActivity(
+    "info",
+    `Search terms ready: ${trending.length} trending + ${terms.length - trending.length} static = ${terms.length} total`,
   );
   return terms;
 }

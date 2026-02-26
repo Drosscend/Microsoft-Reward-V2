@@ -1,4 +1,4 @@
-import type { BotState, RewardsInfo, SearchMode } from "./types";
+import type { ActivityLogEntry, BotState, RewardsInfo, SearchMode } from "./types";
 
 // --- DOM helpers ---
 
@@ -12,6 +12,9 @@ function getElement<T extends HTMLElement>(id: string, ctor: new (...args: any[]
 
 const cbPc = getElement("cb-pc", HTMLInputElement);
 const cbMobile = getElement("cb-mobile", HTMLInputElement);
+const cbDailyCards = getElement("cb-daily-cards", HTMLInputElement);
+const cbMoreActivities = getElement("cb-more-activities", HTMLInputElement);
+const cbExploreBing = getElement("cb-explore-bing", HTMLInputElement);
 const actionBtn = getElement("action-btn", HTMLButtonElement);
 const statusDot = getElement("status-dot", HTMLDivElement);
 const statusText = getElement("status-text", HTMLSpanElement);
@@ -20,7 +23,22 @@ const pcCount = getElement("pc-count", HTMLSpanElement);
 const pcFill = getElement("pc-fill", HTMLDivElement);
 const mobileCount = getElement("mobile-count", HTMLSpanElement);
 const mobileFill = getElement("mobile-fill", HTMLDivElement);
+const dailyCardsRow = getElement("daily-cards-row", HTMLDivElement);
+const dailyCardsCount = getElement("daily-cards-count", HTMLSpanElement);
+const dailyCardsFill = getElement("daily-cards-fill", HTMLDivElement);
+const moreActivitiesRow = getElement("more-activities-row", HTMLDivElement);
+const moreActivitiesCount = getElement("more-activities-count", HTMLSpanElement);
+const moreActivitiesFill = getElement("more-activities-fill", HTMLDivElement);
+const exploreBingRow = getElement("explore-bing-row", HTMLDivElement);
+const exploreBingCount = getElement("explore-bing-count", HTMLSpanElement);
+const exploreBingFill = getElement("explore-bing-fill", HTMLDivElement);
 const refreshBtn = getElement("refresh-btn", HTMLButtonElement);
+const logHeader = getElement("log-header", HTMLDivElement);
+const logChevron = getElement("log-chevron", HTMLSpanElement);
+const logBody = getElement("log-body", HTMLDivElement);
+const logEntries = getElement("log-entries", HTMLDivElement);
+const logEmpty = getElement("log-empty", HTMLDivElement);
+const logClearBtn = getElement("log-clear-btn", HTMLButtonElement);
 
 let isRunning = false;
 
@@ -48,6 +66,20 @@ function updateActionButton(running: boolean): void {
 function updateCheckboxes(disabled: boolean): void {
   cbPc.disabled = disabled;
   cbMobile.disabled = disabled;
+  cbDailyCards.disabled = disabled;
+  cbMoreActivities.disabled = disabled;
+  cbExploreBing.disabled = disabled;
+}
+
+function updateProgressBar(
+  countEl: HTMLSpanElement,
+  fillEl: HTMLDivElement,
+  current: number,
+  target: number,
+): void {
+  countEl.textContent = `${current} / ${target}`;
+  const pct = target > 0 ? Math.min((current / target) * 100, 100) : 0;
+  fillEl.style.width = `${pct}%`;
 }
 
 function updateRewardsUI(info: RewardsInfo): void {
@@ -57,28 +89,60 @@ function updateRewardsUI(info: RewardsInfo): void {
   }
 
   if (info.pcProgress) {
-    const { current, target } = info.pcProgress;
-    pcCount.textContent = `${current} / ${target}`;
-    const pct = target > 0 ? Math.min((current / target) * 100, 100) : 0;
-    pcFill.style.width = `${pct}%`;
+    updateProgressBar(pcCount, pcFill, info.pcProgress.current, info.pcProgress.target);
   }
 
   if (info.mobileProgress) {
-    const { current, target } = info.mobileProgress;
-    mobileCount.textContent = `${current} / ${target}`;
-    const pct = target > 0 ? Math.min((current / target) * 100, 100) : 0;
-    mobileFill.style.width = `${pct}%`;
+    updateProgressBar(mobileCount, mobileFill, info.mobileProgress.current, info.mobileProgress.target);
+  }
+
+  if (info.dailyCardsProgress) {
+    updateProgressBar(dailyCardsCount, dailyCardsFill, info.dailyCardsProgress.current, info.dailyCardsProgress.target);
+  }
+
+  if (info.moreActivitiesProgress) {
+    updateProgressBar(moreActivitiesCount, moreActivitiesFill, info.moreActivitiesProgress.current, info.moreActivitiesProgress.target);
+  }
+
+  if (info.exploreBingProgress) {
+    updateProgressBar(exploreBingCount, exploreBingFill, info.exploreBingProgress.current, info.exploreBingProgress.target);
+  }
+}
+
+function updateCardProgressUI(state: BotState): void {
+  // During bot run, override card bars with bot progress
+  if (state.dailyCards) {
+    updateProgressBar(dailyCardsCount, dailyCardsFill, state.dailyCards.currentCard, state.dailyCards.totalCards);
+  }
+  if (state.moreActivities) {
+    updateProgressBar(moreActivitiesCount, moreActivitiesFill, state.moreActivities.currentCard, state.moreActivities.totalCards);
+  }
+  if (state.exploreBing) {
+    updateProgressBar(exploreBingCount, exploreBingFill, state.exploreBing.currentCard, state.exploreBing.totalCards);
   }
 }
 
 function updateBotUI(state: BotState): void {
   isRunning = state.isRunning;
+  updateCardProgressUI(state);
 
   if (state.isRunning) {
     updateActionButton(true);
     updateCheckboxes(true);
-    const modeLabel = state.mode === "pc" ? "PC" : "Mobile";
-    setStatus("running", `${modeLabel} ${state.currentIndex}/${state.total}`);
+
+    if (state.dailyCards?.isActive) {
+      const { currentCard, totalCards } = state.dailyCards;
+      setStatus("running", `Daily Cards ${currentCard}/${totalCards}`);
+    } else if (state.moreActivities?.isActive) {
+      const { currentCard, totalCards } = state.moreActivities;
+      setStatus("running", `Activities ${currentCard}/${totalCards}`);
+    } else if (state.exploreBing?.isActive) {
+      const { currentCard, totalCards } = state.exploreBing;
+      setStatus("running", `Explore Bing ${currentCard}/${totalCards}`);
+    } else {
+      const modeLabel = state.mode === "pc" ? "PC" : "Mobile";
+      setStatus("running", `${modeLabel} ${state.currentIndex}/${state.total}`);
+    }
   } else if (state.error === "All searches already complete!") {
     updateActionButton(false);
     updateCheckboxes(false);
@@ -87,7 +151,7 @@ function updateBotUI(state: BotState): void {
     updateActionButton(false);
     updateCheckboxes(false);
     setStatus("error", state.error);
-  } else if (state.currentIndex > 0) {
+  } else if (state.currentIndex > 0 || state.dailyCards || state.moreActivities || state.exploreBing) {
     updateActionButton(false);
     updateCheckboxes(false);
     setStatus("done", "Done");
@@ -96,7 +160,83 @@ function updateBotUI(state: BotState): void {
     updateCheckboxes(false);
     setStatus("idle", "Idle");
   }
+  updateStartButtonState();
 }
+
+// --- Activity log ---
+
+function formatTime(ts: number): string {
+  const d = new Date(ts);
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function renderFullLog(entries: ActivityLogEntry[]): void {
+  // Remove all children except the empty placeholder
+  while (logEntries.firstChild) {
+    logEntries.removeChild(logEntries.firstChild);
+  }
+
+  if (entries.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "log-empty";
+    empty.textContent = "No activity yet";
+    logEntries.appendChild(empty);
+    return;
+  }
+
+  for (const entry of entries) {
+    const row = document.createElement("div");
+    row.className = "log-entry";
+
+    const time = document.createElement("span");
+    time.className = "log-time";
+    time.textContent = formatTime(entry.timestamp);
+
+    const msg = document.createElement("span");
+    msg.className = `log-msg ${entry.level}`;
+    msg.textContent = entry.message;
+    msg.title = entry.message;
+
+    row.appendChild(time);
+    row.appendChild(msg);
+    logEntries.appendChild(row);
+  }
+
+  // Auto-scroll to bottom
+  logEntries.scrollTop = logEntries.scrollHeight;
+}
+
+// Toggle log panel
+logHeader.addEventListener("click", (e) => {
+  // Don't toggle when clicking clear button
+  if ((e.target as HTMLElement).id === "log-clear-btn") return;
+  logBody.classList.toggle("open");
+  logChevron.classList.toggle("open");
+});
+
+// Clear log
+logClearBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  sendMsg({ action: "clear-log" });
+  renderFullLog([]);
+});
+
+// --- Checkbox disable logic ---
+
+function updateStartButtonState(): void {
+  if (isRunning) {
+    actionBtn.disabled = false;
+    return;
+  }
+  const anyChecked = cbPc.checked || cbMobile.checked || cbDailyCards.checked || cbMoreActivities.checked || cbExploreBing.checked;
+  actionBtn.disabled = !anyChecked;
+}
+
+cbPc.addEventListener("change", updateStartButtonState);
+cbMobile.addEventListener("change", updateStartButtonState);
+cbDailyCards.addEventListener("change", updateStartButtonState);
+cbMoreActivities.addEventListener("change", updateStartButtonState);
+cbExploreBing.addEventListener("change", updateStartButtonState);
 
 // --- Messaging helper ---
 
@@ -111,13 +251,18 @@ function sendMsg(message: Record<string, unknown>, callback?: (response: any) =>
 
 // --- Initialization ---
 
-// Load current state and rewards info on popup open
-chrome.storage.session.get(["botState", "rewardsInfo"], (result) => {
+// Load current state, rewards info, and activity log on popup open
+chrome.storage.session.get(["botState", "rewardsInfo", "activityLog"], (result) => {
   const state = result.botState as BotState | undefined;
   if (state) updateBotUI(state);
 
   const info = result.rewardsInfo as RewardsInfo | undefined;
   if (info) updateRewardsUI(info);
+
+  const log = result.activityLog as ActivityLogEntry[] | undefined;
+  if (log) renderFullLog(log);
+
+  updateStartButtonState();
 });
 
 // Auto-refresh rewards info on popup open
@@ -137,6 +282,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.rewardsInfo) {
     updateRewardsUI(changes.rewardsInfo.newValue as RewardsInfo);
   }
+
+  if (changes.activityLog) {
+    renderFullLog((changes.activityLog.newValue as ActivityLogEntry[]) ?? []);
+  }
 });
 
 // Start / Stop button
@@ -149,10 +298,13 @@ actionBtn.addEventListener("click", () => {
   const modes: SearchMode[] = [];
   if (cbPc.checked) modes.push("pc");
   if (cbMobile.checked) modes.push("mobile");
+  const dailyCards = cbDailyCards.checked;
+  const moreActivities = cbMoreActivities.checked;
+  const exploreBing = cbExploreBing.checked;
 
-  if (modes.length === 0) return;
+  if (modes.length === 0 && !dailyCards && !moreActivities && !exploreBing) return;
 
-  sendMsg({ action: "start", modes });
+  sendMsg({ action: "start", modes, dailyCards, moreActivities, exploreBing });
 });
 
 // Refresh rewards info button
