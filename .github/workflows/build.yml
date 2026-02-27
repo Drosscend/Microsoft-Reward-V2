@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,3 +27,13 @@ jobs:
         with:
           name: microsoft-rewards-bot
           path: microsoft-rewards-bot.zip
+
+      - name: Update latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest microsoft-rewards-bot.zip \
+            --title "Latest Build" \
+            --notes "Automatic build from commit ${{ github.sha }}." \
+            --target ${{ github.sha }}
