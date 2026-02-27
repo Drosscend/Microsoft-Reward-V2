@@ -1,0 +1,26 @@
+name: Build Extension
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install
+
+      - run: bun run build
+
+      - name: Create extension zip
+        run: cd extension && zip -r ../microsoft-rewards-bot.zip . -x "src/*" -x "build.ts"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: microsoft-rewards-bot
+          path: microsoft-rewards-bot.zip
