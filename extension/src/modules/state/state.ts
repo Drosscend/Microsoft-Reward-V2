@@ -1,6 +1,6 @@
 // Bot state management with mutex-protected updates
 
-import type { BotState } from "./types";
+import type { BotState } from "../../shared/types";
 
 export function getDefaultState(): BotState {
   return {

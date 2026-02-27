@@ -1,8 +1,8 @@
 // Tab lifecycle and debugger attachment management
 
-import { cdpSend } from "./cdp";
-import { getState, setState } from "./state";
-import type { BotState } from "./types";
+import { cdpSend } from "../cdp";
+import { getState, setState } from "../state";
+import type { BotState } from "../../shared/types";
 
 // Flag to prevent concurrent ensureTab calls
 let isEnsuring = false;

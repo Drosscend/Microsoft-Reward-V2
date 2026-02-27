@@ -1,6 +1,6 @@
 // Chrome DevTools Protocol helpers
 
-import { randomInt } from "./utils";
+import { randomInt } from "../../shared/utils";
 
 export async function cdpSend(
   tabId: number,

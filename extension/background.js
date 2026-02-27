@@ -1,4 +1,4 @@
-// src/utils.ts
+// src/shared/utils.ts
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -11,7 +11,7 @@ function shuffle(arr) {
   return a;
 }
 
-// src/cdp.ts
+// src/modules/cdp/cdp.ts
 async function cdpSend(tabId, method, params) {
   return chrome.debugger.sendCommand({ tabId }, method, params);
 }
@@ -83,8 +83,7 @@ async function waitForPageLoad(tabId) {
     chrome.debugger.onEvent.addListener(listener);
   });
 }
-
-// src/logger.ts
+// src/modules/logger/logger.ts
 var MAX_LOG_ENTRIES = 150;
 var STORAGE_KEY = "activityLog";
 var consoleMethods = {
@@ -114,8 +113,7 @@ async function clearActivityLog() {
     await chrome.storage.session.set({ [STORAGE_KEY]: [] });
   } catch {}
 }
-
-// src/state.ts
+// src/modules/state/state.ts
 function getDefaultState() {
   return {
     isRunning: false,
@@ -150,8 +148,7 @@ async function updateState(fn) {
   await stateMutex;
   return result;
 }
-
-// src/daily-cards.ts
+// src/modules/cards/card-processor.ts
 async function waitForSectionRender(tabId, selector) {
   const maxWait = 1e4;
   const interval = 500;
@@ -378,6 +375,7 @@ async function performMoreActivities(tabId, actionableNames) {
     actionableNames
   }, false);
 }
+// src/modules/cards/explore-bing.ts
 var EXPLORE_SEARCH_MAP = {
   shopping: "best online shopping deals",
   weather: "weather forecast this week",
@@ -440,66 +438,7 @@ async function performExploreBing(tabId, actionableNames) {
     }
   }, false);
 }
-
-// src/human-behavior.ts
-async function simulateHumanBehavior(tabId) {
-  await new Promise((r) => setTimeout(r, randomInt(500, 1500)));
-  const steps = randomInt(1, 3);
-  for (let i = 0;i < steps; i++) {
-    const distance = randomInt(150, 400);
-    await cdpSend(tabId, "Runtime.evaluate", {
-      expression: `window.scrollBy({ top: ${distance}, behavior: "smooth" })`
-    });
-    await new Promise((r) => setTimeout(r, randomInt(200, 500)));
-  }
-  if (Math.random() < 0.5) {
-    const x = randomInt(100, 1100);
-    const y = randomInt(100, 600);
-    await cdpSend(tabId, "Input.dispatchMouseEvent", {
-      type: "mouseMoved",
-      x,
-      y
-    });
-  }
-  if (Math.random() < 0.25) {
-    try {
-      const result = await cdpSend(tabId, "Runtime.evaluate", {
-        expression: `(() => {
-          const links = document.querySelectorAll(".b_algo h2 a");
-          if (links.length === 0) return null;
-          const max = Math.min(links.length, 5);
-          const idx = Math.floor(Math.random() * max);
-          return links[idx].href;
-        })()`,
-        returnByValue: true
-      });
-      const href = result?.result?.value;
-      if (href) {
-        const state = await getState();
-        const newTab = await chrome.tabs.create({ url: href, active: false });
-        if (state.groupId !== null && newTab.id) {
-          try {
-            await chrome.tabs.group({ tabIds: [newTab.id], groupId: state.groupId });
-          } catch (e) {
-            console.warn("[MSR] Could not add tab to group:", e);
-          }
-        }
-        await new Promise((r) => setTimeout(r, randomInt(2000, 5000)));
-        if (newTab.id) {
-          try {
-            await chrome.tabs.remove(newTab.id);
-          } catch (e) {
-            console.warn("[MSR] Could not close tab:", e);
-          }
-        }
-      }
-    } catch (e) {
-      console.warn("[MSR] Error during result click simulation:", e);
-    }
-  }
-}
-
-// src/rewards.ts
+// src/modules/rewards/rewards.ts
 var FALLBACK_PC_SEARCHES = 30;
 var POINTS_PER_SEARCH = 3;
 function getUserLanguage(promos) {
@@ -664,8 +603,7 @@ async function getRemainingSearches() {
     return 0;
   return Math.ceil(remainingPoints / POINTS_PER_SEARCH);
 }
-
-// src/tab-manager.ts
+// src/modules/tabs/tab-manager.ts
 var isEnsuring = false;
 async function ensureTab(state) {
   if (isEnsuring) {
@@ -724,8 +662,65 @@ async function ensureTab(state) {
     isEnsuring = false;
   }
 }
+// src/modules/search/human-behavior.ts
+async function simulateHumanBehavior(tabId) {
+  await new Promise((r) => setTimeout(r, randomInt(500, 1500)));
+  const steps = randomInt(1, 3);
+  for (let i = 0;i < steps; i++) {
+    const distance = randomInt(150, 400);
+    await cdpSend(tabId, "Runtime.evaluate", {
+      expression: `window.scrollBy({ top: ${distance}, behavior: "smooth" })`
+    });
+    await new Promise((r) => setTimeout(r, randomInt(200, 500)));
+  }
+  if (Math.random() < 0.5) {
+    const x = randomInt(100, 1100);
+    const y = randomInt(100, 600);
+    await cdpSend(tabId, "Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x,
+      y
+    });
+  }
+  if (Math.random() < 0.25) {
+    try {
+      const result = await cdpSend(tabId, "Runtime.evaluate", {
+        expression: `(() => {
+          const links = document.querySelectorAll(".b_algo h2 a");
+          if (links.length === 0) return null;
+          const max = Math.min(links.length, 5);
+          const idx = Math.floor(Math.random() * max);
+          return links[idx].href;
+        })()`,
+        returnByValue: true
+      });
+      const href = result?.result?.value;
+      if (href) {
+        const state = await getState();
+        const newTab = await chrome.tabs.create({ url: href, active: false });
+        if (state.groupId !== null && newTab.id) {
+          try {
+            await chrome.tabs.group({ tabIds: [newTab.id], groupId: state.groupId });
+          } catch (e) {
+            console.warn("[MSR] Could not add tab to group:", e);
+          }
+        }
+        await new Promise((r) => setTimeout(r, randomInt(2000, 5000)));
+        if (newTab.id) {
+          try {
+            await chrome.tabs.remove(newTab.id);
+          } catch (e) {
+            console.warn("[MSR] Could not close tab:", e);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[MSR] Error during result click simulation:", e);
+    }
+  }
+}
 
-// src/search-terms.ts
+// src/modules/search/search-terms.ts
 var SEARCH_TERMS = [
   "Actualités France",
   "Recettes de cuisine",
@@ -779,7 +774,7 @@ var SEARCH_TERMS = [
   "Startups"
 ];
 
-// src/terms.ts
+// src/modules/search/terms.ts
 var GOOGLE_TRENDS_FEEDS = [
   "https://trends.google.com/trending/rss?geo=FR",
   "https://trends.google.com/trending/rss?geo=US",
@@ -846,9 +841,9 @@ async function getSearchTerms() {
   return terms;
 }
 
-// src/background.ts
+// src/modules/search/search.ts
 var PC_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
-async function performNextSearch() {
+async function performNextSearch(stopSearches) {
   const state = await getState();
   if (!state.isRunning)
     return;
@@ -902,6 +897,17 @@ async function performNextSearch() {
     chrome.alarms.create("next-search", { delayInMinutes: delayMinutes });
   }
 }
+async function startSearchPhase(remaining, hasCardPhases, tabId) {
+  if (remaining > 0) {
+    if (hasCardPhases) {
+      await cdpSend(tabId, "Page.navigate", { url: "https://www.bing.com" });
+      await waitForPageLoad(tabId);
+    }
+    await logActivity("info", `Starting PC search phase (${remaining} searches)`);
+    chrome.alarms.create("next-search", { delayInMinutes: 0.01 });
+  }
+}
+// src/workers/background.ts
 async function startSearches(modes, dailyCards, moreActivities, exploreBing) {
   await chrome.storage.session.remove("searchTerms");
   await getSearchTerms();
@@ -1020,12 +1026,7 @@ async function startSearches(modes, dailyCards, moreActivities, exploreBing) {
     }
   }
   if (remaining > 0) {
-    if (hasCardPhases) {
-      await cdpSend(tabId, "Page.navigate", { url: "https://www.bing.com" });
-      await waitForPageLoad(tabId);
-    }
-    await logActivity("info", `Starting PC search phase (${remaining} searches)`);
-    chrome.alarms.create("next-search", { delayInMinutes: 0.01 });
+    await startSearchPhase(remaining, hasCardPhases, tabId);
   } else {
     await stopSearches();
   }
@@ -1062,7 +1063,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "next-search") {
-    performNextSearch();
+    performNextSearch(stopSearches);
   }
 });
 chrome.debugger.onDetach.addListener(async (source) => {

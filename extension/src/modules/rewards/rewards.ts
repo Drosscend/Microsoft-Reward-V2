@@ -1,18 +1,11 @@
 // Microsoft Rewards API interaction
 
-import { logActivity } from "./logger";
-import type { CardFilters, RewardsInfo } from "./types";
+import { logActivity } from "../logger";
+import type { CardFilters, RewardsInfo } from "../../shared/types";
+import type { Promotion } from "./types";
 
 const FALLBACK_PC_SEARCHES = 30;
 const POINTS_PER_SEARCH = 3;
-
-interface Promotion {
-  name: string;
-  complete: boolean;
-  pointProgressMax: number;
-  pointProgress: number;
-  attributes?: { is_unlocked?: string };
-}
 
 // Detect the user's 2-letter language code from completed locale-specific promos
 // e.g., "FRFR_Rewards_..." → "FR", "ENUS_task..." → "EN"

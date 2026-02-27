@@ -1,6 +1,6 @@
 // Activity logger: writes to console AND persists to session storage
 
-import type { ActivityLogEntry, LogLevel } from "./types";
+import type { ActivityLogEntry, LogLevel } from "../../shared/types";
 
 const MAX_LOG_ENTRIES = 150;
 const STORAGE_KEY = "activityLog";

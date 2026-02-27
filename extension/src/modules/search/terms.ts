@@ -1,8 +1,8 @@
 // Search term management: trending + static fallback
 
-import { logActivity } from "./logger";
+import { logActivity } from "../logger";
 import { SEARCH_TERMS as STATIC_TERMS } from "./search-terms";
-import { shuffle } from "./utils";
+import { shuffle } from "../../shared/utils";
 
 // Multiple geo feeds to get more trending terms (~10 per feed)
 const GOOGLE_TRENDS_FEEDS = [

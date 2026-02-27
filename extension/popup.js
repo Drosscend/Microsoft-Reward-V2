@@ -1,4 +1,4 @@
-// src/popup.ts
+// src/ui/popup.ts
 function getElement(id, ctor) {
   const el = document.getElementById(id);
   if (!el || !(el instanceof ctor)) {

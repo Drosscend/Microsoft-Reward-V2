@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BotState, RewardsInfo, SearchMode } from "./types";
+import type { ActivityLogEntry, BotState, RewardsInfo, SearchMode } from "../shared/types";
 
 // --- DOM helpers ---
 

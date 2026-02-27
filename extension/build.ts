@@ -1,10 +1,11 @@
 await Bun.build({
   entrypoints: [
-    "src/background.ts",
-    "src/popup.ts",
+    "src/workers/background.ts",
+    "src/ui/popup.ts",
   ],
   outdir: ".",
   target: "browser",
+  naming: "[name].js",
 });
 
 console.log("Build complete! Load the extension/ folder in Edge.");

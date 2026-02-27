@@ -1,8 +1,8 @@
 // Human behavior simulation to avoid bot detection
 
-import { cdpSend } from "./cdp";
-import { getState } from "./state";
-import { randomInt } from "./utils";
+import { cdpSend } from "../cdp";
+import { getState } from "../state";
+import { randomInt } from "../../shared/utils";
 
 export async function simulateHumanBehavior(tabId: number): Promise<void> {
   // Dwell time: wait 0.5-1.5s
