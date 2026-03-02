@@ -120,9 +120,12 @@ async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActiv
     }
   }
 
-  // Navigate to rewards page once for all card phases that need it
+  // Navigate to rewards page once for all card phases that need it.
+  // Daily cards navigates only when it has actionable items — if it returned
+  // early (0 actionable), we still need to navigate for the remaining phases.
   const needsRewardsNav = moreActivities || exploreBing;
-  if (needsRewardsNav && !dailyCards) {
+  const dailyCardsNavigated = dailyCards && (cardFilters?.dailyCards ?? []).length > 0;
+  if (needsRewardsNav && !dailyCardsNavigated) {
     await cdpSend(tabId, "Page.navigate", { url: "https://rewards.bing.com" });
     await waitForPageLoad(tabId);
   }
@@ -169,6 +172,11 @@ async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActiv
           : { isActive: false, currentCard: 0, totalCards: 0 },
       }));
     }
+  }
+
+  // Refresh rewards info after card phases so progress bars reflect completion
+  if (hasCardPhases) {
+    await fetchRewardsInfo();
   }
 
   // If PC searches are needed, continue with alarm-based flow

@@ -1005,7 +1005,8 @@ async function startSearches(modes, dailyCards, moreActivities, exploreBing) {
     }
   }
   const needsRewardsNav = moreActivities || exploreBing;
-  if (needsRewardsNav && !dailyCards) {
+  const dailyCardsNavigated = dailyCards && (cardFilters?.dailyCards ?? []).length > 0;
+  if (needsRewardsNav && !dailyCardsNavigated) {
     await cdpSend(tabId, "Page.navigate", { url: "https://rewards.bing.com" });
     await waitForPageLoad(tabId);
   }
@@ -1044,6 +1045,9 @@ async function startSearches(modes, dailyCards, moreActivities, exploreBing) {
         exploreBing: s.exploreBing ? { ...s.exploreBing, isActive: false } : { isActive: false, currentCard: 0, totalCards: 0 }
       }));
     }
+  }
+  if (hasCardPhases) {
+    await fetchRewardsInfo();
   }
   if (remaining > 0) {
     await startSearchPhase(remaining, hasCardPhases, tabId);
