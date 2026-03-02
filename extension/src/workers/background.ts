@@ -2,6 +2,7 @@
 
 import { cdpSend, waitForPageLoad } from "../modules/cdp";
 import { performDailyCards, performExploreBing, performMoreActivities } from "../modules/cards";
+import { setIconDefault, setIconRunning } from "../modules/icon";
 import { clearActivityLog, logActivity } from "../modules/logger";
 import { fetchCardFilters, fetchRewardsInfo, getRemainingSearches } from "../modules/rewards";
 import { performNextSearch, startSearchPhase, getSearchTerms } from "../modules/search";
@@ -89,6 +90,7 @@ async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActiv
   };
 
   await setState(state);
+  await setIconRunning();
 
   await logActivity("info", "Bot started");
 
@@ -206,6 +208,7 @@ async function stopSearches(): Promise<void> {
   // so progress bars transition smoothly from bot values to API values
   await fetchRewardsInfo();
   await setState(getDefaultState());
+  await setIconDefault();
 }
 
 // --- Top-level event listeners (required for MV3 service worker) ---
@@ -254,5 +257,9 @@ chrome.debugger.onDetach.addListener(async (source) => {
     await logActivity("warn", "Debugger detached unexpectedly, stopping");
     await chrome.alarms.clear("next-search");
     await setState({ ...state, isRunning: false, error: "Debugger detached" });
+    await setIconDefault();
   }
 });
+
+// Set default icon on service worker startup
+setIconDefault().catch(() => {});
