@@ -267,7 +267,14 @@ async function performCardSection(tabId, config, needsNavigation) {
     await waitForSectionRender(tabId, renderCheckSelector);
   } catch (e) {
     console.warn(`[MSR] ${label} not found, skipping:`, e);
-    await updateState((s) => setCardState(s, stateKey, { isActive: false, currentCard: 0, totalCards: 0 }));
+    await updateState((s) => {
+      const current = s[stateKey];
+      return setCardState(s, stateKey, {
+        isActive: false,
+        currentCard: current?.totalCards ?? 0,
+        totalCards: current?.totalCards ?? 0
+      });
+    });
     return;
   }
   await new Promise((r) => setTimeout(r, randomInt(500, 1000)));
@@ -281,7 +288,14 @@ async function performCardSection(tabId, config, needsNavigation) {
   }));
   if (actionableCards.length === 0) {
     await logActivity("info", `All ${label} already completed`);
-    await updateState((s) => setCardState(s, stateKey, { isActive: false, currentCard: 0, totalCards: 0 }));
+    await updateState((s) => {
+      const current = s[stateKey];
+      return setCardState(s, stateKey, {
+        isActive: false,
+        currentCard: current?.totalCards ?? 0,
+        totalCards: current?.totalCards ?? 0
+      });
+    });
     return;
   }
   for (let i = 0;i < actionableCards.length; i++) {
@@ -974,10 +988,12 @@ async function startSearches(modes, dailyCards, moreActivities, exploreBing) {
   const hasCardPhases = dailyCards || moreActivities || exploreBing;
   if (dailyCards) {
     const indices = cardFilters?.dailyCards ?? [];
-    await updateState((s) => ({
-      ...s,
-      dailyCards: { isActive: true, currentCard: 0, totalCards: indices.length }
-    }));
+    if (indices.length > 0) {
+      await updateState((s) => ({
+        ...s,
+        dailyCards: { isActive: true, currentCard: 0, totalCards: indices.length }
+      }));
+    }
     try {
       await performDailyCards(tabId, indices);
     } catch (error) {
@@ -995,10 +1011,12 @@ async function startSearches(modes, dailyCards, moreActivities, exploreBing) {
   }
   if (moreActivities) {
     const names = cardFilters?.moreActivities ?? [];
-    await updateState((s) => ({
-      ...s,
-      moreActivities: { isActive: true, currentCard: 0, totalCards: names.length }
-    }));
+    if (names.length > 0) {
+      await updateState((s) => ({
+        ...s,
+        moreActivities: { isActive: true, currentCard: 0, totalCards: names.length }
+      }));
+    }
     try {
       await performMoreActivities(tabId, names);
     } catch (error) {
@@ -1011,10 +1029,12 @@ async function startSearches(modes, dailyCards, moreActivities, exploreBing) {
   }
   if (exploreBing) {
     const names = cardFilters?.exploreBing ?? [];
-    await updateState((s) => ({
-      ...s,
-      exploreBing: { isActive: true, currentCard: 0, totalCards: names.length }
-    }));
+    if (names.length > 0) {
+      await updateState((s) => ({
+        ...s,
+        exploreBing: { isActive: true, currentCard: 0, totalCards: names.length }
+      }));
+    }
     try {
       await performExploreBing(tabId, names);
     } catch (error) {
@@ -1040,8 +1060,8 @@ async function stopSearches() {
   }
   await chrome.alarms.clear("next-search");
   await logActivity("info", "Bot stopped");
-  await setState(getDefaultState());
   await fetchRewardsInfo();
+  await setState(getDefaultState());
 }
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.action === "start") {

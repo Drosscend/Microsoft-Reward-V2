@@ -100,10 +100,12 @@ async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActiv
 
   if (dailyCards) {
     const indices = cardFilters?.dailyCards ?? [];
-    await updateState((s) => ({
-      ...s,
-      dailyCards: { isActive: true, currentCard: 0, totalCards: indices.length },
-    }));
+    if (indices.length > 0) {
+      await updateState((s) => ({
+        ...s,
+        dailyCards: { isActive: true, currentCard: 0, totalCards: indices.length },
+      }));
+    }
 
     try {
       await performDailyCards(tabId, indices);
@@ -127,10 +129,12 @@ async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActiv
 
   if (moreActivities) {
     const names = cardFilters?.moreActivities ?? [];
-    await updateState((s) => ({
-      ...s,
-      moreActivities: { isActive: true, currentCard: 0, totalCards: names.length },
-    }));
+    if (names.length > 0) {
+      await updateState((s) => ({
+        ...s,
+        moreActivities: { isActive: true, currentCard: 0, totalCards: names.length },
+      }));
+    }
 
     try {
       await performMoreActivities(tabId, names);
@@ -147,10 +151,12 @@ async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActiv
 
   if (exploreBing) {
     const names = cardFilters?.exploreBing ?? [];
-    await updateState((s) => ({
-      ...s,
-      exploreBing: { isActive: true, currentCard: 0, totalCards: names.length },
-    }));
+    if (names.length > 0) {
+      await updateState((s) => ({
+        ...s,
+        exploreBing: { isActive: true, currentCard: 0, totalCards: names.length },
+      }));
+    }
 
     try {
       await performExploreBing(tabId, names);
@@ -187,10 +193,11 @@ async function stopSearches(): Promise<void> {
 
   await chrome.alarms.clear("next-search");
   await logActivity("info", "Bot stopped");
-  await setState(getDefaultState());
 
-  // Fetch updated rewards info after completion
+  // Fetch updated rewards info BEFORE resetting state
+  // so progress bars transition smoothly from bot values to API values
   await fetchRewardsInfo();
+  await setState(getDefaultState());
 }
 
 // --- Top-level event listeners (required for MV3 service worker) ---

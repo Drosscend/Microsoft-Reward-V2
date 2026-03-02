@@ -170,9 +170,14 @@ export async function performCardSection(
     await waitForSectionRender(tabId, renderCheckSelector);
   } catch (e) {
     console.warn(`[MSR] ${label} not found, skipping:`, e);
-    await updateState((s) =>
-      setCardState(s, stateKey, { isActive: false, currentCard: 0, totalCards: 0 }),
-    );
+    await updateState((s) => {
+      const current = s[stateKey];
+      return setCardState(s, stateKey, {
+        isActive: false,
+        currentCard: current?.totalCards ?? 0,
+        totalCards: current?.totalCards ?? 0,
+      });
+    });
     return;
   }
 
@@ -196,9 +201,14 @@ export async function performCardSection(
 
   if (actionableCards.length === 0) {
     await logActivity("info", `All ${label} already completed`);
-    await updateState((s) =>
-      setCardState(s, stateKey, { isActive: false, currentCard: 0, totalCards: 0 }),
-    );
+    await updateState((s) => {
+      const current = s[stateKey];
+      return setCardState(s, stateKey, {
+        isActive: false,
+        currentCard: current?.totalCards ?? 0,
+        totalCards: current?.totalCards ?? 0,
+      });
+    });
     return;
   }
 
