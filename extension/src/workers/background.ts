@@ -12,15 +12,27 @@ import type { BotState, PopupToWorkerMessage, SearchMode } from "../shared/types
 // --- Orchestration ---
 
 async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActivities: boolean, exploreBing: boolean): Promise<void> {
-  // Clear cached terms so we get fresh trending topics
-  await chrome.storage.session.remove("searchTerms");
-  await getSearchTerms();
+  const pcRequested = modes.includes("pc");
+
+  // Only fetch search terms if PC searches are requested
+  if (pcRequested) {
+    await chrome.storage.session.remove("searchTerms");
+    const terms = await getSearchTerms();
+
+    if (terms.length === 0) {
+      await logActivity("error", "Cannot start — no search terms available (all feeds failed)");
+      await setState({
+        ...getDefaultState(),
+        error: "No search terms available — check your internet connection",
+      });
+      return;
+    }
+  }
 
   // Fetch rewards info before starting
   await fetchRewardsInfo();
 
   // Check remaining PC searches
-  const pcRequested = modes.includes("pc");
   let remaining = 0;
   if (pcRequested) {
     remaining = await getRemainingSearches();
@@ -66,6 +78,11 @@ async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActiv
   // Enable required CDP domains
   await cdpSend(tabId, "Page.enable");
   await cdpSend(tabId, "Runtime.enable");
+
+  // Hide navigator.webdriver flag set by chrome.debugger
+  await cdpSend(tabId, "Page.addScriptToEvaluateOnNewDocument", {
+    source: "Object.defineProperty(navigator, 'webdriver', { get: () => undefined })",
+  });
 
   // Wait for the tab to be fully loaded
   await new Promise<void>((resolve) => {
@@ -263,3 +280,4 @@ chrome.debugger.onDetach.addListener(async (source) => {
 
 // Set default icon on service worker startup
 setIconDefault().catch(() => {});
+

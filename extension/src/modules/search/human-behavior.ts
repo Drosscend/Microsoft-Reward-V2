@@ -4,71 +4,94 @@ import { cdpSend } from "../cdp";
 import { getState } from "../state";
 import { randomInt } from "../../shared/utils";
 
-export async function simulateHumanBehavior(tabId: number): Promise<void> {
-  // Dwell time: wait 0.5-1.5s
-  await new Promise((r) => setTimeout(r, randomInt(500, 1500)));
+async function simulateMouseMovements(tabId: number): Promise<void> {
+  const moves = randomInt(2, 4);
+  let x = randomInt(200, 600);
+  let y = randomInt(150, 400);
 
-  // Scroll the page (1-3 steps)
-  const steps = randomInt(1, 3);
-  for (let i = 0; i < steps; i++) {
-    const distance = randomInt(150, 400);
-    await cdpSend(tabId, "Runtime.evaluate", {
-      expression: `window.scrollBy({ top: ${distance}, behavior: "smooth" })`,
-    });
-    await new Promise((r) => setTimeout(r, randomInt(200, 500)));
-  }
+  for (let i = 0; i < moves; i++) {
+    // Move progressively, not teleport
+    x += randomInt(-150, 150);
+    y += randomInt(-100, 100);
+    x = Math.max(50, Math.min(1200, x));
+    y = Math.max(50, Math.min(700, y));
 
-  // 50% chance to move mouse
-  if (Math.random() < 0.5) {
-    const x = randomInt(100, 1100);
-    const y = randomInt(100, 600);
     await cdpSend(tabId, "Input.dispatchMouseEvent", {
       type: "mouseMoved",
       x,
       y,
     });
+    await new Promise((r) => setTimeout(r, randomInt(100, 400)));
+  }
+}
+
+async function simulateScrolling(tabId: number): Promise<void> {
+  const steps = randomInt(2, 5);
+  for (let i = 0; i < steps; i++) {
+    const distance = randomInt(100, 350);
+    await cdpSend(tabId, "Runtime.evaluate", {
+      expression: `window.scrollBy({ top: ${distance}, behavior: "smooth" })`,
+    });
+    // Pause between scrolls like reading content
+    await new Promise((r) => setTimeout(r, randomInt(800, 2500)));
+  }
+}
+
+async function simulateResultClick(tabId: number): Promise<void> {
+  try {
+    const result = (await cdpSend(tabId, "Runtime.evaluate", {
+      expression: `(() => {
+        const links = document.querySelectorAll(".b_algo h2 a");
+        if (links.length === 0) return null;
+        const max = Math.min(links.length, 5);
+        const idx = Math.floor(Math.random() * max);
+        return links[idx].href;
+      })()`,
+      returnByValue: true,
+    })) as { result?: { value?: string | null } };
+
+    const href = result?.result?.value;
+    if (!href) return;
+
+    const state = await getState();
+    const newTab = await chrome.tabs.create({ url: href, active: false });
+
+    if (state.groupId !== null && newTab.id) {
+      try {
+        await chrome.tabs.group({ tabIds: [newTab.id], groupId: state.groupId });
+      } catch (e) {
+        console.warn("[MSR] Could not add tab to group:", e);
+      }
+    }
+
+    // Stay on the page like reading it
+    await new Promise((r) => setTimeout(r, randomInt(5000, 15000)));
+    if (newTab.id) {
+      try {
+        await chrome.tabs.remove(newTab.id);
+      } catch (e) {
+        console.warn("[MSR] Could not close tab:", e);
+      }
+    }
+  } catch (e) {
+    console.warn("[MSR] Error during result click simulation:", e);
+  }
+}
+
+export async function simulateHumanBehavior(tabId: number): Promise<void> {
+  // Dwell time: pause before interacting (reading results)
+  await new Promise((r) => setTimeout(r, randomInt(3000, 8000)));
+
+  // Scroll the page with reading pauses
+  await simulateScrolling(tabId);
+
+  // 70% chance to move mouse progressively
+  if (Math.random() < 0.7) {
+    await simulateMouseMovements(tabId);
   }
 
-  // 25% chance to click a result in a new tab
-  if (Math.random() < 0.25) {
-    try {
-      const result = (await cdpSend(tabId, "Runtime.evaluate", {
-        expression: `(() => {
-          const links = document.querySelectorAll(".b_algo h2 a");
-          if (links.length === 0) return null;
-          const max = Math.min(links.length, 5);
-          const idx = Math.floor(Math.random() * max);
-          return links[idx].href;
-        })()`,
-        returnByValue: true,
-      })) as { result?: { value?: string | null } };
-
-      const href = result?.result?.value;
-      if (href) {
-        const state = await getState();
-        const newTab = await chrome.tabs.create({ url: href, active: false });
-
-        // Add to tab group if available
-        if (state.groupId !== null && newTab.id) {
-          try {
-            await chrome.tabs.group({ tabIds: [newTab.id], groupId: state.groupId });
-          } catch (e) {
-            console.warn("[MSR] Could not add tab to group:", e);
-          }
-        }
-
-        // Wait 2-5 seconds then close
-        await new Promise((r) => setTimeout(r, randomInt(2000, 5000)));
-        if (newTab.id) {
-          try {
-            await chrome.tabs.remove(newTab.id);
-          } catch (e) {
-            console.warn("[MSR] Could not close tab:", e);
-          }
-        }
-      }
-    } catch (e) {
-      console.warn("[MSR] Error during result click simulation:", e);
-    }
+  // 30% chance to click a result and stay on it
+  if (Math.random() < 0.3) {
+    await simulateResultClick(tabId);
   }
 }

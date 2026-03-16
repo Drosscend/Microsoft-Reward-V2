@@ -9,8 +9,13 @@ import { randomInt } from "../../shared/utils";
 import { simulateHumanBehavior } from "./human-behavior";
 import { getSearchTerms } from "./terms";
 
-export const PC_USER_AGENT =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
+// 80% chance: 20-90s, 20% chance: long pause 1-3min (simulates reading a result)
+function nextSearchDelay(): number {
+  if (Math.random() < 0.2) {
+    return randomInt(60, 180) / 60;
+  }
+  return randomInt(20, 90) / 60;
+}
 
 export async function performNextSearch(stopSearches: () => Promise<void>): Promise<void> {
   const state = await getState();
@@ -22,15 +27,16 @@ export async function performNextSearch(stopSearches: () => Promise<void>): Prom
   }
 
   const terms = await getSearchTerms();
+  if (terms.length === 0) {
+    await logActivity("error", "No search terms available, stopping");
+    await stopSearches();
+    return;
+  }
   const termIndex = state.currentIndex % terms.length;
   const searchTerm = terms[termIndex];
 
   try {
     const tabId = await ensureTab(state);
-
-    await cdpSend(tabId, "Emulation.setUserAgentOverride", {
-      userAgent: PC_USER_AGENT,
-    });
 
     // Focus and select existing text in the search box
     await cdpSend(tabId, "Runtime.evaluate", {
@@ -71,9 +77,8 @@ export async function performNextSearch(stopSearches: () => Promise<void>): Prom
     // Refresh rewards info after each search
     fetchRewardsInfo().catch((e) => console.warn("[MSR] Background rewards refresh failed:", e));
 
-    // Schedule next search with random delay (3-6s)
-    const delayMinutes = randomInt(3, 6) / 60;
-    chrome.alarms.create("next-search", { delayInMinutes: delayMinutes });
+    // Schedule next search with human-like delay
+    chrome.alarms.create("next-search", { delayInMinutes: nextSearchDelay() });
   } catch (error) {
     logActivity("error", `Search error: "${searchTerm}" — ${error}`);
     // Continue to next search despite error
@@ -82,8 +87,7 @@ export async function performNextSearch(stopSearches: () => Promise<void>): Prom
       return { ...s, currentIndex: s.currentIndex + 1 };
     });
     if (!updatedState.isRunning) return;
-    const delayMinutes = randomInt(3, 6) / 60;
-    chrome.alarms.create("next-search", { delayInMinutes: delayMinutes });
+    chrome.alarms.create("next-search", { delayInMinutes: nextSearchDelay() });
   }
 }
 

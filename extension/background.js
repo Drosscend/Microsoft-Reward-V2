@@ -746,124 +746,85 @@ async function ensureTab(state) {
   }
 }
 // src/modules/search/human-behavior.ts
-async function simulateHumanBehavior(tabId) {
-  await new Promise((r) => setTimeout(r, randomInt(500, 1500)));
-  const steps = randomInt(1, 3);
-  for (let i = 0;i < steps; i++) {
-    const distance = randomInt(150, 400);
-    await cdpSend(tabId, "Runtime.evaluate", {
-      expression: `window.scrollBy({ top: ${distance}, behavior: "smooth" })`
-    });
-    await new Promise((r) => setTimeout(r, randomInt(200, 500)));
-  }
-  if (Math.random() < 0.5) {
-    const x = randomInt(100, 1100);
-    const y = randomInt(100, 600);
+async function simulateMouseMovements(tabId) {
+  const moves = randomInt(2, 4);
+  let x = randomInt(200, 600);
+  let y = randomInt(150, 400);
+  for (let i = 0;i < moves; i++) {
+    x += randomInt(-150, 150);
+    y += randomInt(-100, 100);
+    x = Math.max(50, Math.min(1200, x));
+    y = Math.max(50, Math.min(700, y));
     await cdpSend(tabId, "Input.dispatchMouseEvent", {
       type: "mouseMoved",
       x,
       y
     });
+    await new Promise((r) => setTimeout(r, randomInt(100, 400)));
   }
-  if (Math.random() < 0.25) {
-    try {
-      const result = await cdpSend(tabId, "Runtime.evaluate", {
-        expression: `(() => {
-          const links = document.querySelectorAll(".b_algo h2 a");
-          if (links.length === 0) return null;
-          const max = Math.min(links.length, 5);
-          const idx = Math.floor(Math.random() * max);
-          return links[idx].href;
-        })()`,
-        returnByValue: true
-      });
-      const href = result?.result?.value;
-      if (href) {
-        const state = await getState();
-        const newTab = await chrome.tabs.create({ url: href, active: false });
-        if (state.groupId !== null && newTab.id) {
-          try {
-            await chrome.tabs.group({ tabIds: [newTab.id], groupId: state.groupId });
-          } catch (e) {
-            console.warn("[MSR] Could not add tab to group:", e);
-          }
-        }
-        await new Promise((r) => setTimeout(r, randomInt(2000, 5000)));
-        if (newTab.id) {
-          try {
-            await chrome.tabs.remove(newTab.id);
-          } catch (e) {
-            console.warn("[MSR] Could not close tab:", e);
-          }
-        }
+}
+async function simulateScrolling(tabId) {
+  const steps = randomInt(2, 5);
+  for (let i = 0;i < steps; i++) {
+    const distance = randomInt(100, 350);
+    await cdpSend(tabId, "Runtime.evaluate", {
+      expression: `window.scrollBy({ top: ${distance}, behavior: "smooth" })`
+    });
+    await new Promise((r) => setTimeout(r, randomInt(800, 2500)));
+  }
+}
+async function simulateResultClick(tabId) {
+  try {
+    const result = await cdpSend(tabId, "Runtime.evaluate", {
+      expression: `(() => {
+        const links = document.querySelectorAll(".b_algo h2 a");
+        if (links.length === 0) return null;
+        const max = Math.min(links.length, 5);
+        const idx = Math.floor(Math.random() * max);
+        return links[idx].href;
+      })()`,
+      returnByValue: true
+    });
+    const href = result?.result?.value;
+    if (!href)
+      return;
+    const state = await getState();
+    const newTab = await chrome.tabs.create({ url: href, active: false });
+    if (state.groupId !== null && newTab.id) {
+      try {
+        await chrome.tabs.group({ tabIds: [newTab.id], groupId: state.groupId });
+      } catch (e) {
+        console.warn("[MSR] Could not add tab to group:", e);
       }
-    } catch (e) {
-      console.warn("[MSR] Error during result click simulation:", e);
     }
+    await new Promise((r) => setTimeout(r, randomInt(5000, 15000)));
+    if (newTab.id) {
+      try {
+        await chrome.tabs.remove(newTab.id);
+      } catch (e) {
+        console.warn("[MSR] Could not close tab:", e);
+      }
+    }
+  } catch (e) {
+    console.warn("[MSR] Error during result click simulation:", e);
+  }
+}
+async function simulateHumanBehavior(tabId) {
+  await new Promise((r) => setTimeout(r, randomInt(3000, 8000)));
+  await simulateScrolling(tabId);
+  if (Math.random() < 0.7) {
+    await simulateMouseMovements(tabId);
+  }
+  if (Math.random() < 0.3) {
+    await simulateResultClick(tabId);
   }
 }
 
-// src/modules/search/search-terms.ts
-var SEARCH_TERMS = [
-  "Actualités France",
-  "Recettes de cuisine",
-  "Météo",
-  "Football",
-  "Cinéma",
-  "Santé",
-  "Voyages",
-  "Musique",
-  "Technologies",
-  "Mode",
-  "Emploi",
-  "Éducation",
-  "Économie",
-  "Politique",
-  "Environnement",
-  "Jeux vidéo",
-  "Livres",
-  "Sport",
-  "Séries TV",
-  "Art",
-  "Science",
-  "Histoire",
-  "Animaux",
-  "Automobile",
-  "Bricolage",
-  "Jardinage",
-  "Beauté",
-  "Bien-être",
-  "Gastronomie",
-  "Décoration",
-  "Informatique",
-  "Photographie",
-  "Danse",
-  "Théâtre",
-  "Musées",
-  "Astronomie",
-  "Psychologie",
-  "Philosophie",
-  "Langues étrangères",
-  "Yoga",
-  "Méditation",
-  "Écologie",
-  "Recycling",
-  "Énergies renouvelables",
-  "Littérature",
-  "Poésie",
-  "Architecture",
-  "Design",
-  "Innovation",
-  "Startups"
-];
-
 // src/modules/search/terms.ts
-var GOOGLE_TRENDS_FEEDS = [
-  "https://trends.google.com/trending/rss?geo=FR",
-  "https://trends.google.com/trending/rss?geo=US",
-  "https://trends.google.com/trending/rss?geo=GB"
-];
+var GOOGLE_TRENDS_RSS = "https://trends.google.com/trending/rss?geo=FR";
+var GOOGLE_AUTOCOMPLETE = "https://www.google.com/complete/search?client=firefox&hl=fr&q=";
 var TITLE_REGEX = /<title>([^<]+)<\/title>/;
+var EXPAND_LETTERS = "abcdefghijklmnopqrstuvwxyz";
 function parseTrendingTitles(xml) {
   const titles = [];
   const itemRegex = /<item>[\s\S]*?<\/item>/g;
@@ -876,56 +837,93 @@ function parseTrendingTitles(xml) {
   }
   return titles;
 }
-async function fetchTrendingTerms() {
-  const results = await Promise.allSettled(GOOGLE_TRENDS_FEEDS.map(async (url) => {
-    const resp = await fetch(url);
+async function fetchTrendingSeeds() {
+  try {
+    const resp = await fetch(GOOGLE_TRENDS_RSS);
     if (!resp.ok)
       throw new Error(`HTTP ${resp.status}`);
-    return parseTrendingTitles(await resp.text());
-  }));
-  const seen = new Set;
-  const titles = [];
-  for (const result of results) {
-    if (result.status === "fulfilled") {
-      for (const title of result.value) {
-        const key = title.toLowerCase();
+    const titles = parseTrendingTitles(await resp.text());
+    if (titles.length > 0) {
+      logActivity("info", `Fetched ${titles.length} trending seeds from Google Trends FR`);
+    }
+    return titles;
+  } catch (error) {
+    console.warn("[MSR] Failed to fetch Google Trends RSS:", error);
+    return [];
+  }
+}
+async function fetchAutocompleteSuggestions(query) {
+  try {
+    const resp = await fetch(GOOGLE_AUTOCOMPLETE + encodeURIComponent(query));
+    if (!resp.ok)
+      return [];
+    const data = await resp.json();
+    return data[1] ?? [];
+  } catch {
+    return [];
+  }
+}
+function pickRandomLetters(count) {
+  const letters = [];
+  const available = EXPAND_LETTERS.split("");
+  for (let i = 0;i < count; i++) {
+    const idx = randomInt(0, available.length - 1);
+    letters.push(available.splice(idx, 1)[0]);
+  }
+  return letters;
+}
+async function expandWithAutocomplete(seeds) {
+  const seen = new Set(seeds.map((s) => s.toLowerCase()));
+  const expanded = [...seeds];
+  for (const seed of seeds) {
+    const suggestions = await fetchAutocompleteSuggestions(seed);
+    for (const s of suggestions) {
+      const key = s.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        expanded.push(s);
+      }
+    }
+    await new Promise((r) => setTimeout(r, randomInt(200, 400)));
+    const letters = pickRandomLetters(3);
+    for (const letter of letters) {
+      const letterSuggestions = await fetchAutocompleteSuggestions(`${seed} ${letter}`);
+      for (const s of letterSuggestions) {
+        const key = s.toLowerCase();
         if (!seen.has(key)) {
           seen.add(key);
-          titles.push(title);
+          expanded.push(s);
         }
       }
-    } else {
-      console.warn("[MSR] Failed to fetch one trending feed:", result.reason);
+      await new Promise((r) => setTimeout(r, randomInt(200, 400)));
     }
   }
-  if (titles.length > 0) {
-    logActivity("info", `Fetched ${titles.length} trending terms from Google Trends`);
-  }
-  return titles;
+  return expanded;
 }
 async function getSearchTerms() {
   const cached = await chrome.storage.session.get("searchTerms");
-  if (cached.searchTerms && Array.isArray(cached.searchTerms)) {
+  if (cached.searchTerms && Array.isArray(cached.searchTerms) && cached.searchTerms.length > 0) {
     return cached.searchTerms;
   }
-  const trending = await fetchTrendingTerms();
-  const staticShuffled = shuffle(SEARCH_TERMS);
-  const combined = [...trending];
-  const lowerSet = new Set(combined.map((t) => t.toLowerCase()));
-  for (const term of staticShuffled) {
-    if (!lowerSet.has(term.toLowerCase())) {
-      combined.push(term);
-      lowerSet.add(term.toLowerCase());
-    }
+  const seeds = await fetchTrendingSeeds();
+  if (seeds.length === 0) {
+    logActivity("error", "No trending seeds fetched — cannot generate search terms");
+    return [];
   }
-  const terms = shuffle(combined);
+  const expanded = await expandWithAutocomplete(seeds);
+  const terms = shuffle(expanded);
   await chrome.storage.session.set({ searchTerms: terms });
-  await logActivity("info", `Search terms ready: ${trending.length} trending + ${terms.length - trending.length} static = ${terms.length} total`);
+  await logActivity("info", `Search terms ready: ${seeds.length} seeds expanded to ${terms.length} unique terms`);
   return terms;
 }
 
 // src/modules/search/search.ts
-var PC_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0";
+function nextSearchDelay() {
+  if (Math.random() < 0.2) {
+    return randomInt(60, 180) / 60;
+  }
+  return randomInt(20, 90) / 60;
+}
 async function performNextSearch(stopSearches) {
   const state = await getState();
   if (!state.isRunning)
@@ -935,13 +933,15 @@ async function performNextSearch(stopSearches) {
     return;
   }
   const terms = await getSearchTerms();
+  if (terms.length === 0) {
+    await logActivity("error", "No search terms available, stopping");
+    await stopSearches();
+    return;
+  }
   const termIndex = state.currentIndex % terms.length;
   const searchTerm = terms[termIndex];
   try {
     const tabId = await ensureTab(state);
-    await cdpSend(tabId, "Emulation.setUserAgentOverride", {
-      userAgent: PC_USER_AGENT
-    });
     await cdpSend(tabId, "Runtime.evaluate", {
       expression: `(() => {
         const input = document.querySelector("#sb_form_q");
@@ -965,8 +965,7 @@ async function performNextSearch(stopSearches) {
       return;
     await logActivity("info", `Searched: "${searchTerm}" (${updatedState.currentIndex}/${updatedState.total} PC)`);
     fetchRewardsInfo().catch((e) => console.warn("[MSR] Background rewards refresh failed:", e));
-    const delayMinutes = randomInt(3, 6) / 60;
-    chrome.alarms.create("next-search", { delayInMinutes: delayMinutes });
+    chrome.alarms.create("next-search", { delayInMinutes: nextSearchDelay() });
   } catch (error) {
     logActivity("error", `Search error: "${searchTerm}" — ${error}`);
     const updatedState = await updateState((s) => {
@@ -976,8 +975,7 @@ async function performNextSearch(stopSearches) {
     });
     if (!updatedState.isRunning)
       return;
-    const delayMinutes = randomInt(3, 6) / 60;
-    chrome.alarms.create("next-search", { delayInMinutes: delayMinutes });
+    chrome.alarms.create("next-search", { delayInMinutes: nextSearchDelay() });
   }
 }
 async function startSearchPhase(remaining, hasCardPhases, tabId) {
@@ -992,10 +990,20 @@ async function startSearchPhase(remaining, hasCardPhases, tabId) {
 }
 // src/workers/background.ts
 async function startSearches(modes, dailyCards, moreActivities, exploreBing) {
-  await chrome.storage.session.remove("searchTerms");
-  await getSearchTerms();
-  await fetchRewardsInfo();
   const pcRequested = modes.includes("pc");
+  if (pcRequested) {
+    await chrome.storage.session.remove("searchTerms");
+    const terms = await getSearchTerms();
+    if (terms.length === 0) {
+      await logActivity("error", "Cannot start — no search terms available (all feeds failed)");
+      await setState({
+        ...getDefaultState(),
+        error: "No search terms available — check your internet connection"
+      });
+      return;
+    }
+  }
+  await fetchRewardsInfo();
   let remaining = 0;
   if (pcRequested) {
     remaining = await getRemainingSearches();
@@ -1030,6 +1038,9 @@ async function startSearches(modes, dailyCards, moreActivities, exploreBing) {
   await chrome.debugger.attach({ tabId }, "1.3");
   await cdpSend(tabId, "Page.enable");
   await cdpSend(tabId, "Runtime.enable");
+  await cdpSend(tabId, "Page.addScriptToEvaluateOnNewDocument", {
+    source: "Object.defineProperty(navigator, 'webdriver', { get: () => undefined })"
+  });
   await new Promise((resolve) => {
     const checkReady = () => {
       chrome.tabs.get(tabId, (tab) => {

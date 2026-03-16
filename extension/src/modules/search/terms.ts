@@ -1,17 +1,13 @@
-// Search term management: trending + static fallback
+// Search term management: Google Trends RSS + Google Autocomplete expansion
 
 import { logActivity } from "../logger";
-import { SEARCH_TERMS as STATIC_TERMS } from "./search-terms";
-import { shuffle } from "../../shared/utils";
+import { shuffle, randomInt } from "../../shared/utils";
 
-// Multiple geo feeds to get more trending terms (~10 per feed)
-const GOOGLE_TRENDS_FEEDS = [
-  "https://trends.google.com/trending/rss?geo=FR",
-  "https://trends.google.com/trending/rss?geo=US",
-  "https://trends.google.com/trending/rss?geo=GB",
-];
+const GOOGLE_TRENDS_RSS = "https://trends.google.com/trending/rss?geo=FR";
+const GOOGLE_AUTOCOMPLETE = "https://www.google.com/complete/search?client=firefox&hl=fr&q=";
 
 const TITLE_REGEX = /<title>([^<]+)<\/title>/;
+const EXPAND_LETTERS = "abcdefghijklmnopqrstuvwxyz";
 
 function parseTrendingTitles(xml: string): string[] {
   const titles: string[] = [];
@@ -26,66 +22,99 @@ function parseTrendingTitles(xml: string): string[] {
   return titles;
 }
 
-async function fetchTrendingTerms(): Promise<string[]> {
-  const results = await Promise.allSettled(
-    GOOGLE_TRENDS_FEEDS.map(async (url) => {
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      return parseTrendingTitles(await resp.text());
-    }),
-  );
+async function fetchTrendingSeeds(): Promise<string[]> {
+  try {
+    const resp = await fetch(GOOGLE_TRENDS_RSS);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const titles = parseTrendingTitles(await resp.text());
+    if (titles.length > 0) {
+      logActivity("info", `Fetched ${titles.length} trending seeds from Google Trends FR`);
+    }
+    return titles;
+  } catch (error) {
+    console.warn("[MSR] Failed to fetch Google Trends RSS:", error);
+    return [];
+  }
+}
 
-  const seen = new Set<string>();
-  const titles: string[] = [];
+async function fetchAutocompleteSuggestions(query: string): Promise<string[]> {
+  try {
+    const resp = await fetch(GOOGLE_AUTOCOMPLETE + encodeURIComponent(query));
+    if (!resp.ok) return [];
+    const data = (await resp.json()) as [string, string[]];
+    return data[1] ?? [];
+  } catch {
+    return [];
+  }
+}
 
-  for (const result of results) {
-    if (result.status === "fulfilled") {
-      for (const title of result.value) {
-        const key = title.toLowerCase();
+function pickRandomLetters(count: number): string[] {
+  const letters: string[] = [];
+  const available = EXPAND_LETTERS.split("");
+  for (let i = 0; i < count; i++) {
+    const idx = randomInt(0, available.length - 1);
+    letters.push(available.splice(idx, 1)[0]);
+  }
+  return letters;
+}
+
+async function expandWithAutocomplete(seeds: string[]): Promise<string[]> {
+  const seen = new Set<string>(seeds.map((s) => s.toLowerCase()));
+  const expanded: string[] = [...seeds];
+
+  for (const seed of seeds) {
+    // Direct autocomplete on the seed
+    const suggestions = await fetchAutocompleteSuggestions(seed);
+    for (const s of suggestions) {
+      const key = s.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        expanded.push(s);
+      }
+    }
+    await new Promise((r) => setTimeout(r, randomInt(200, 400)));
+
+    // Expand with 3 random letters: "seed a", "seed m", "seed r"
+    const letters = pickRandomLetters(3);
+    for (const letter of letters) {
+      const letterSuggestions = await fetchAutocompleteSuggestions(`${seed} ${letter}`);
+      for (const s of letterSuggestions) {
+        const key = s.toLowerCase();
         if (!seen.has(key)) {
           seen.add(key);
-          titles.push(title);
+          expanded.push(s);
         }
       }
-    } else {
-      console.warn("[MSR] Failed to fetch one trending feed:", result.reason);
+      await new Promise((r) => setTimeout(r, randomInt(200, 400)));
     }
   }
 
-  if (titles.length > 0) {
-    logActivity("info", `Fetched ${titles.length} trending terms from Google Trends`);
-  }
-  return titles;
+  return expanded;
 }
 
 export async function getSearchTerms(): Promise<string[]> {
   // Check if we already have terms cached for this session
   const cached = await chrome.storage.session.get("searchTerms");
-  if (cached.searchTerms && Array.isArray(cached.searchTerms)) {
+  if (cached.searchTerms && Array.isArray(cached.searchTerms) && cached.searchTerms.length > 0) {
     return cached.searchTerms as string[];
   }
 
-  // Fetch trending terms and mix with static fallback
-  const trending = await fetchTrendingTerms();
-  const staticShuffled = shuffle(STATIC_TERMS);
+  // Fetch trending seeds from Google Trends RSS
+  const seeds = await fetchTrendingSeeds();
 
-  // Trending first, then fill with static terms (no duplicates)
-  const combined = [...trending];
-  const lowerSet = new Set(combined.map((t) => t.toLowerCase()));
-  for (const term of staticShuffled) {
-    if (!lowerSet.has(term.toLowerCase())) {
-      combined.push(term);
-      lowerSet.add(term.toLowerCase());
-    }
+  if (seeds.length === 0) {
+    logActivity("error", "No trending seeds fetched — cannot generate search terms");
+    return [];
   }
 
-  // Shuffle everything for natural randomness
-  const terms = shuffle(combined);
+  // Expand seeds with Google Autocomplete
+  const expanded = await expandWithAutocomplete(seeds);
+  const terms = shuffle(expanded);
 
   await chrome.storage.session.set({ searchTerms: terms });
   await logActivity(
     "info",
-    `Search terms ready: ${trending.length} trending + ${terms.length - trending.length} static = ${terms.length} total`,
+    `Search terms ready: ${seeds.length} seeds expanded to ${terms.length} unique terms`,
   );
   return terms;
 }
