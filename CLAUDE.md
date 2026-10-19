@@ -14,7 +14,7 @@ cd extension && bun run build.ts  # Alternative: build from extension dir
 
 1. `edge://extensions` → Developer mode ON
 2. "Load unpacked" → select the `extension/` folder
-3. Click the extension icon → check PC / Mobile → Start
+3. Click the extension icon → check the tasks → Start
 
 ## Architecture
 
@@ -52,9 +52,11 @@ extension/
       search/
         search.ts          # performNextSearch + startSearchPhase (extracted from background)
         human-behavior.ts  # Human simulation: scrolling, mouse moves, random result clicks
-        terms.ts           # Search terms: trending from Google Trends + static fallback
-        search-terms.ts    # Static list of ~50 search terms
+        terms.ts           # Search terms: Google Trends seeds expanded by Google Autocomplete
         index.ts           # → performNextSearch, startSearchPhase, getSearchTerms
+      icon/
+        icon.ts         # Dynamic toolbar icon from raw ImageData: blue when idle, green while running
+        index.ts        # → setIconDefault, setIconRunning
     ui/
       popup.ts          # Popup logic: start/stop, progress display, rewards UI
     workers/
@@ -80,7 +82,7 @@ ui/popup.ts  ←  standalone UI entry point
 
 1. **Popup** sends `start`/`stop`/`fetch-rewards` messages to the service worker
 2. **background.ts** receives messages, calls `startSearches()` which sets up tab + debugger + state, runs card phases, then delegates to `startSearchPhase()` for alarm-based searches
-3. Each alarm triggers `performNextSearch()` (in `modules/search/`) which: gets terms → ensures tab → sets UA → types search → waits for load → simulates human behavior → schedules next alarm
+3. Each alarm triggers `performNextSearch()` (in `modules/search/`) which: gets terms → ensures tab → types search → waits for load → simulates human behavior → schedules next alarm
 4. **State** is persisted in `chrome.storage.session` — popup listens to `storage.onChanged` for live updates
 5. `updateState()` uses a Promise-chain mutex to prevent read-modify-write race conditions
 6. Each module exposes its public API via `index.ts` barrel exports — internal types/helpers stay private
@@ -90,8 +92,8 @@ ui/popup.ts  ←  standalone UI entry point
 - **Package manager**: Always use `bun` / `bunx` — never npm, yarn, or pnpm
 - **Language**: TypeScript only, strict mode enabled
 - **Browser**: Extension runs inside Edge — uses `chrome.debugger` API for CDP, no Puppeteer
-- **User-Agent switching**: The bot switches UA between PC (Edge) and Mobile (Safari/iPhone) via `Emulation.setUserAgentOverride` — never hardcode a single UA
-- **Search terms**: Trending terms fetched from Google Trends RSS, mixed with static fallback in `search-terms.ts` (~50 terms), cached in session storage
+- **User-Agent**: Never override it (no `Emulation.setUserAgentOverride`); the bot keeps the browser's native UA
+- **Search terms**: Google Trends RSS (FR) seeds expanded with Google Autocomplete, cached in session storage. No static fallback: if no terms come back, the bot refuses to start
 - **No credentials in code**: User must be logged in to their Microsoft account before starting — never store or automate credential entry
 - **Error handling**: Catch errors per search iteration so one failure doesn't stop the entire batch — always log with `[MSR]` prefix
 - **MV3 constraints**: All event listeners must be registered at top-level in the service worker — no lazy registration

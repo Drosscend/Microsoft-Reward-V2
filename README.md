@@ -10,7 +10,7 @@ An Edge browser extension that automatically performs Bing searches to earn Micr
 - **Daily cards & activities** — completes daily promotions and "More Activities" tasks
 - **Explore Bing** — handles the Explore Bing bonus searches
 - **Human-like behavior** — simulates scrolling, mouse movements, and random clicks to look natural
-- **Trending search terms** — uses Google Trends and a built-in fallback list for realistic queries
+- **Trending search terms** — uses Google Trends and Google autocomplete for realistic queries
 - **Live progress** — shows your current points and completion progress in a clean popup
 - **Activity log** — real-time log of what the bot is doing
 
@@ -72,7 +72,7 @@ Une extension Edge qui effectue automatiquement des recherches Bing pour gagner 
 - **Cartes du jour & activités** — complète les promotions quotidiennes et les tâches "More Activities"
 - **Explore Bing** — gère les recherches bonus Explore Bing
 - **Comportement humain** — simule le défilement, les mouvements de souris et des clics aléatoires pour paraître naturel
-- **Termes de recherche tendance** — utilise Google Trends et une liste de secours intégrée pour des requêtes réalistes
+- **Termes de recherche tendance** — utilise Google Trends et l'autocomplétion de Google pour des requêtes réalistes
 - **Progression en direct** — affiche vos points et votre avancement dans un popup clair
 - **Journal d'activité** — suivi en temps réel de ce que fait le bot
 
