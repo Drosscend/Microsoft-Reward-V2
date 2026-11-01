@@ -21,6 +21,8 @@ export interface BotState {
   dailyCards?: DailyCardsState;
   moreActivities?: DailyCardsState;
   exploreBing?: DailyCardsState;
+  // Set when a run was requested but every selected task was already done
+  alreadyComplete?: boolean;
   error?: string;
 }
 

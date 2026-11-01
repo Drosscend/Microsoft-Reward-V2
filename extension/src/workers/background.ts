@@ -6,7 +6,7 @@ import { setIconDefault, setIconRunning } from "../modules/icon";
 import { clearActivityLog, logActivity } from "../modules/logger";
 import { fetchRewards, getRemainingSearches } from "../modules/rewards";
 import { loadSearchTerms, performNextSearch, startSearchPhase } from "../modules/search";
-import { getDefaultState, getState, setState, updateState } from "../modules/state";
+import { getDefaultState, getState, setState } from "../modules/state";
 import type { BotState, PopupToWorkerMessage } from "../shared/types";
 
 // --- Orchestration ---
@@ -41,10 +41,7 @@ async function startSearches(pcSearches: boolean, dailyCards: boolean, moreActiv
   // Nothing to do at all
   if (remaining === 0 && !dailyCards && !moreActivities && !exploreBing) {
     logActivity("info", "All selected tasks are already complete");
-    await setState({
-      ...getDefaultState(),
-      error: "All searches already complete!",
-    });
+    await setState({ ...getDefaultState(), alreadyComplete: true });
     return;
   }
 
@@ -111,71 +108,9 @@ async function startSearches(pcSearches: boolean, dailyCards: boolean, moreActiv
   // Run reward card phases synchronously before searches
   const hasCardPhases = dailyCards || moreActivities || exploreBing;
 
-  if (dailyCards) {
-    const indices = cardFilters?.dailyCards ?? [];
-    if (indices.length > 0) {
-      await updateState((s) => ({
-        ...s,
-        dailyCards: { isActive: true, currentCard: 0, totalCards: indices.length },
-      }));
-    }
-
-    try {
-      await performDailyCards(tabId, indices);
-    } catch (error) {
-      logActivity("error", `Daily cards phase failed: ${error}`);
-      await updateState((s) => ({
-        ...s,
-        dailyCards: s.dailyCards
-          ? { ...s.dailyCards, isActive: false }
-          : { isActive: false, currentCard: 0, totalCards: 0 },
-      }));
-    }
-  }
-
-  if (moreActivities) {
-    const names = cardFilters?.moreActivities ?? [];
-    if (names.length > 0) {
-      await updateState((s) => ({
-        ...s,
-        moreActivities: { isActive: true, currentCard: 0, totalCards: names.length },
-      }));
-    }
-
-    try {
-      await performMoreActivities(tabId, names);
-    } catch (error) {
-      logActivity("error", `More activities phase failed: ${error}`);
-      await updateState((s) => ({
-        ...s,
-        moreActivities: s.moreActivities
-          ? { ...s.moreActivities, isActive: false }
-          : { isActive: false, currentCard: 0, totalCards: 0 },
-      }));
-    }
-  }
-
-  if (exploreBing) {
-    const names = cardFilters?.exploreBing ?? [];
-    if (names.length > 0) {
-      await updateState((s) => ({
-        ...s,
-        exploreBing: { isActive: true, currentCard: 0, totalCards: names.length },
-      }));
-    }
-
-    try {
-      await performExploreBing(tabId, names);
-    } catch (error) {
-      logActivity("error", `Explore Bing phase failed: ${error}`);
-      await updateState((s) => ({
-        ...s,
-        exploreBing: s.exploreBing
-          ? { ...s.exploreBing, isActive: false }
-          : { isActive: false, currentCard: 0, totalCards: 0 },
-      }));
-    }
-  }
+  if (dailyCards) await performDailyCards(tabId, cardFilters?.dailyCards ?? []);
+  if (moreActivities) await performMoreActivities(tabId, cardFilters?.moreActivities ?? []);
+  if (exploreBing) await performExploreBing(tabId, cardFilters?.exploreBing ?? []);
 
   // Refresh rewards info after card phases so progress bars reflect completion
   if (hasCardPhases) {

@@ -134,7 +134,7 @@ function updateBotUI(state: BotState): void {
     } else {
       setStatus("running", `PC ${state.currentIndex}/${state.total}`);
     }
-  } else if (state.error === "All searches already complete!") {
+  } else if (state.alreadyComplete) {
     updateActionButton(false);
     updateCheckboxes(false);
     setStatus("done", "All searches complete!");

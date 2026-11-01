@@ -176,9 +176,43 @@ function setCardState(
   return { ...state, [key]: value };
 }
 
+async function endPhase(stateKey: StateKey): Promise<void> {
+  await updateState((s) => {
+    const current = s[stateKey];
+    return setCardState(s, stateKey, {
+      isActive: false,
+      currentCard: current?.currentCard ?? 0,
+      totalCards: current?.totalCards ?? 0,
+    });
+  });
+}
+
 // --- Generic card section processor ---
 
 export async function performCardSection(
+  tabId: number,
+  config: CardSectionConfig,
+): Promise<void> {
+  const { stateKey, label, targets } = config;
+
+  if (targets.length === 0) {
+    logActivity("info", `${label}: nothing actionable`);
+    return;
+  }
+
+  await updateState((s) =>
+    setCardState(s, stateKey, { isActive: true, currentCard: 0, totalCards: targets.length }),
+  );
+
+  try {
+    await runCardSection(tabId, config);
+  } catch (error) {
+    logActivity("error", `${label} phase failed: ${error}`);
+    await endPhase(stateKey);
+  }
+}
+
+async function runCardSection(
   tabId: number,
   config: CardSectionConfig,
 ): Promise<void> {
@@ -194,14 +228,7 @@ export async function performCardSection(
     await waitForSectionRender(tabId, sectionSelector);
   } catch (e) {
     console.warn(`[MSR] ${label} not found, skipping:`, e);
-    await updateState((s) => {
-      const current = s[stateKey];
-      return setCardState(s, stateKey, {
-        isActive: false,
-        currentCard: current?.totalCards ?? 0,
-        totalCards: current?.totalCards ?? 0,
-      });
-    });
+    await endPhase(stateKey);
     return;
   }
 
@@ -225,14 +252,7 @@ export async function performCardSection(
 
   if (actionableCards.length === 0) {
     await logActivity("info", `All ${label} already completed`);
-    await updateState((s) => {
-      const current = s[stateKey];
-      return setCardState(s, stateKey, {
-        isActive: false,
-        currentCard: current?.totalCards ?? 0,
-        totalCards: current?.totalCards ?? 0,
-      });
-    });
+    await endPhase(stateKey);
     return;
   }
 
@@ -319,14 +339,7 @@ export async function performCardSection(
   }
 
   // Mark phase as complete
-  await updateState((s) => {
-    const current = s[stateKey];
-    return setCardState(s, stateKey, {
-      isActive: false,
-      currentCard: current?.currentCard ?? actionableCards.length,
-      totalCards: current?.totalCards ?? actionableCards.length,
-    });
-  });
+  await endPhase(stateKey);
 
   await logActivity("info", `${label} phase complete`);
 }
@@ -334,11 +347,6 @@ export async function performCardSection(
 // --- Public API ---
 
 export async function performDailyCards(tabId: number, targets: CardTarget[]): Promise<void> {
-  if (targets.length === 0) {
-    logActivity("info", "Daily cards: nothing actionable");
-    return;
-  }
-
   await performCardSection(tabId, {
     pageUrl: DASHBOARD_URL,
     sectionSelector: "section#dailyset",
@@ -349,11 +357,6 @@ export async function performDailyCards(tabId: number, targets: CardTarget[]): P
 }
 
 export async function performMoreActivities(tabId: number, targets: CardTarget[]): Promise<void> {
-  if (targets.length === 0) {
-    logActivity("info", "More activities: nothing actionable");
-    return;
-  }
-
   await performCardSection(tabId, {
     pageUrl: EARN_URL,
     sectionSelector: "section#moreactivities",

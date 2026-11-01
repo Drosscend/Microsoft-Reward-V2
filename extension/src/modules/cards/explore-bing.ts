@@ -73,11 +73,6 @@ async function searchInNewTab(newTabId: number, query: string): Promise<void> {
 }
 
 export async function performExploreBing(tabId: number, targets: CardTarget[]): Promise<void> {
-  if (targets.length === 0) {
-    logActivity("info", "Explore Bing: nothing actionable");
-    return;
-  }
-
   await performCardSection(tabId, {
     pageUrl: EARN_URL,
     sectionSelector: "section#exploreonbing",
