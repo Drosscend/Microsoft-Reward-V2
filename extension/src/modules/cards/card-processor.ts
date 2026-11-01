@@ -84,7 +84,7 @@ async function discoverLinks(
 
 // Match each API promotion to a link by its destination URL. Several cards can share a URL
 // (explore cards all point to bing.com), so the card title breaks ties.
-function matchTargets(
+export function matchTargets(
   links: CardLink[],
   targets: CardTarget[],
 ): { linkIndex: number; target: CardTarget }[] {

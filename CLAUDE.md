@@ -7,6 +7,8 @@ Edge Manifest V3 extension that automates Bing searches to earn Microsoft Reward
 ```bash
 bun install                  # Install dependencies
 bun run build                # Build extension (extension/build.ts)
+bun run typecheck            # tsc --noEmit
+bun test                     # Unit tests (*.test.ts next to the module)
 cd extension && bun run build.ts  # Alternative: build from extension dir
 ```
 

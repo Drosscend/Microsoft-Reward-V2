@@ -27,7 +27,7 @@ const EXPLORE_SEARCH_MAP: Record<string, string> = {
 // e.g., "NonEN_moreactivities_task14_financemarket_exploreonbing_..." → "stock market prices today"
 // e.g., "ENUS_moreactivities_task35_CellPhone_Plans_exploreonbing_..." → "best cell phone plans"
 // e.g., "FRFR_couponcodes_exploreonbing_activation_Evergreen" → "coupon codes and discounts"
-function getSearchQueryForExplore(apiName: string): string {
+export function getSearchQueryForExplore(apiName: string): string {
   const match = apiName.match(/_([a-z]+(?:_[a-z]+)*)_exploreonbing_/i);
   if (!match) return "trending topics today";
   const rawTopic = match[1].toLowerCase();
