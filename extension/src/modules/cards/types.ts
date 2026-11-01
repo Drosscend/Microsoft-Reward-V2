@@ -13,7 +13,7 @@ export interface CardSectionConfig {
   // API promotions that are incomplete + have points (matched via link href)
   targets: CardTarget[];
   // Optional: handler called when a new tab opens (for explore cards that need a search)
-  onNewTab?: (newTabId: number, cardName: string) => Promise<void>;
+  onNewTab?: (newTabId: number, target: CardTarget) => Promise<void>;
 }
 
 export interface CardLink {

@@ -3,6 +3,7 @@
 export interface Promotion {
   name: string;
   title: string;
+  description: string;
   destinationUrl: string;
   complete: boolean;
   pointProgressMax: number;

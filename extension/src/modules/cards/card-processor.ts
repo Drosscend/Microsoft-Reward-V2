@@ -291,7 +291,7 @@ async function runCardSection(
 
         if (config.onNewTab) {
           // Custom handler (e.g., explore cards need to perform a search)
-          await config.onNewTab(newTab.id, target.name);
+          await config.onNewTab(newTab.id, target);
         } else {
           // Default: just dwell
           await new Promise((r) => setTimeout(r, randomInt(3000, 6000)));

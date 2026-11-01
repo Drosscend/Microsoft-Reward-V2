@@ -6,34 +6,16 @@ import { randomInt } from "../../shared/utils";
 import type { CardTarget } from "../../shared/types";
 import { EARN_URL, performCardSection } from "./card-processor";
 
-// Known topic → search query mapping
-const EXPLORE_SEARCH_MAP: Record<string, string> = {
-  shopping: "best online shopping deals",
-  weather: "weather forecast this week",
-  financemarket: "stock market prices today",
-  streaming_services: "best streaming services comparison",
-  cellphone_plans: "best cell phone plans",
-  airline_tickets: "cheap flights airline tickets",
-  bank_accounts: "best savings bank accounts",
-  rental_cars: "car rental deals near me",
-  beauty_and_hair_products: "best beauty products",
-  all_inclusive_resorts: "all inclusive resort vacation deals",
-  couponcodes: "coupon codes and discounts",
-  creditcards: "best credit cards rewards",
-  insurance: "best insurance plans comparison",
-};
+// Build the search query from the card description, in the account language
+// e.g., "Recherchez sur Bing les derniers codes promo et réductions" → "les derniers codes promo et réductions"
+// Falls back to the topic in the promotion name
+// e.g., "FRFR_couponcodes_exploreonbing_activation_Evergreen" → "couponcodes"
+export function getSearchQueryForExplore(target: CardTarget): string {
+  const fromDescription = (target.description ?? "").replace(/^.*?\bBing\b[\s,:]*/i, "").trim();
+  if (fromDescription) return fromDescription;
 
-// Extract a search query from the API promotion name
-// e.g., "NonEN_moreactivities_task14_financemarket_exploreonbing_..." → "stock market prices today"
-// e.g., "ENUS_moreactivities_task35_CellPhone_Plans_exploreonbing_..." → "best cell phone plans"
-// e.g., "FRFR_couponcodes_exploreonbing_activation_Evergreen" → "coupon codes and discounts"
-export function getSearchQueryForExplore(apiName: string): string {
-  const match = apiName.match(/_([a-z]+(?:_[a-z]+)*)_exploreonbing_/i);
-  if (!match) return "trending topics today";
-  const rawTopic = match[1].toLowerCase();
-  if (EXPLORE_SEARCH_MAP[rawTopic]) return EXPLORE_SEARCH_MAP[rawTopic];
-  // Fallback: replace underscores with spaces
-  return rawTopic.replace(/_/g, " ");
+  const match = target.name.match(/_([a-z]+(?:_[a-z]+)*)_exploreonbing_/i);
+  return match ? match[1].toLowerCase().replace(/_/g, " ") : target.title;
 }
 
 // Perform a search in a new tab (attach debugger, type, enter, wait, detach)
@@ -79,8 +61,8 @@ export async function performExploreBing(tabId: number, targets: CardTarget[]): 
     stateKey: "exploreBing",
     label: "Explore Bing",
     targets,
-    onNewTab: async (newTabId, cardName) => {
-      const query = getSearchQueryForExplore(cardName);
+    onNewTab: async (newTabId, target) => {
+      const query = getSearchQueryForExplore(target);
       await logActivity("info", `Searching: "${query}"`);
       await searchInNewTab(newTabId, query);
     },

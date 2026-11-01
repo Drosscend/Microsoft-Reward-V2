@@ -39,6 +39,7 @@ export interface RewardsInfo {
 export interface CardTarget {
   name: string;
   title: string;
+  description: string;
   url: string;
 }
 

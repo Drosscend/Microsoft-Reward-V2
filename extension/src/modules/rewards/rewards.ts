@@ -39,7 +39,7 @@ function isLockedPromo(promo: Promotion): boolean {
 }
 
 function toCardTarget(promo: Promotion): CardTarget {
-  return { name: promo.name, title: promo.title, url: promo.destinationUrl };
+  return { name: promo.name, title: promo.title, description: promo.description, url: promo.destinationUrl };
 }
 
 function todayKey(): string {
