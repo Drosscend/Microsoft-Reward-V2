@@ -5,11 +5,8 @@ import type { BotState } from "../../shared/types";
 export function getDefaultState(): BotState {
   return {
     isRunning: false,
-    mode: "pc",
     currentIndex: 0,
     total: 0,
-    modes: [],
-    currentModeIndex: 0,
     tabId: null,
     groupId: null,
   };

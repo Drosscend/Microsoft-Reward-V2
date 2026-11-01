@@ -1,5 +1,3 @@
-export type SearchMode = "pc" | "mobile";
-
 export type LogLevel = "info" | "warn" | "error";
 
 export interface ActivityLogEntry {
@@ -16,11 +14,8 @@ export interface DailyCardsState {
 
 export interface BotState {
   isRunning: boolean;
-  mode: SearchMode;
   currentIndex: number;
   total: number;
-  modes: SearchMode[];
-  currentModeIndex: number;
   tabId: number | null;
   groupId: number | null;
   dailyCards?: DailyCardsState;
@@ -32,7 +27,6 @@ export interface BotState {
 export interface RewardsInfo {
   points: number | null;
   pcProgress: { current: number; target: number } | null;
-  mobileProgress: { current: number; target: number } | null;
   dailyCardsProgress: { current: number; target: number } | null;
   moreActivitiesProgress: { current: number; target: number } | null;
   exploreBingProgress: { current: number; target: number } | null;
@@ -53,7 +47,7 @@ export interface CardFilters {
 }
 
 export type PopupToWorkerMessage =
-  | { action: "start"; modes: SearchMode[]; dailyCards: boolean; moreActivities: boolean; exploreBing: boolean }
+  | { action: "start"; pcSearches: boolean; dailyCards: boolean; moreActivities: boolean; exploreBing: boolean }
   | { action: "stop" }
   | { action: "fetch-rewards" }
   | { action: "clear-log" };

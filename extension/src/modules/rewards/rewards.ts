@@ -62,7 +62,6 @@ export async function fetchRewardsInfo(): Promise<RewardsInfo | null> {
 
     const counters = userStatus.counters;
     const pc = counters?.pcSearch?.[0];
-    const mobile = counters?.mobileSearch?.[0];
 
     // Daily cards progress: count completed vs total (only cards with points)
     const dashboard = data?.dashboard;
@@ -102,9 +101,6 @@ export async function fetchRewardsInfo(): Promise<RewardsInfo | null> {
       points: userStatus.availablePoints ?? null,
       pcProgress: pc
         ? { current: pc.pointProgress, target: pc.pointProgressMax }
-        : null,
-      mobileProgress: mobile
-        ? { current: mobile.pointProgress, target: mobile.pointProgressMax }
         : null,
       dailyCardsProgress,
       moreActivitiesProgress,

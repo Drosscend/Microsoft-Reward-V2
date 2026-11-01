@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BotState, RewardsInfo, SearchMode } from "../shared/types";
+import type { ActivityLogEntry, BotState, RewardsInfo } from "../shared/types";
 
 // --- DOM helpers ---
 
@@ -285,15 +285,14 @@ actionBtn.addEventListener("click", () => {
     return;
   }
 
-  const modes: SearchMode[] = [];
-  if (cbPc.checked) modes.push("pc");
+  const pcSearches = cbPc.checked;
   const dailyCards = cbDailyCards.checked;
   const moreActivities = cbMoreActivities.checked;
   const exploreBing = cbExploreBing.checked;
 
-  if (modes.length === 0 && !dailyCards && !moreActivities && !exploreBing) return;
+  if (!pcSearches && !dailyCards && !moreActivities && !exploreBing) return;
 
-  sendMsg({ action: "start", modes, dailyCards, moreActivities, exploreBing });
+  sendMsg({ action: "start", pcSearches, dailyCards, moreActivities, exploreBing });
 });
 
 // Refresh rewards info button

@@ -7,15 +7,13 @@ import { clearActivityLog, logActivity } from "../modules/logger";
 import { fetchCardFilters, fetchRewardsInfo, getRemainingSearches } from "../modules/rewards";
 import { performNextSearch, startSearchPhase, getSearchTerms } from "../modules/search";
 import { getDefaultState, getState, setState, updateState } from "../modules/state";
-import type { BotState, PopupToWorkerMessage, SearchMode } from "../shared/types";
+import type { BotState, PopupToWorkerMessage } from "../shared/types";
 
 // --- Orchestration ---
 
-async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActivities: boolean, exploreBing: boolean): Promise<void> {
-  const pcRequested = modes.includes("pc");
-
+async function startSearches(pcSearches: boolean, dailyCards: boolean, moreActivities: boolean, exploreBing: boolean): Promise<void> {
   // Only fetch search terms if PC searches are requested
-  if (pcRequested) {
+  if (pcSearches) {
     await chrome.storage.session.remove("searchTerms");
     const terms = await getSearchTerms();
 
@@ -34,7 +32,7 @@ async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActiv
 
   // Check remaining PC searches
   let remaining = 0;
-  if (pcRequested) {
+  if (pcSearches) {
     remaining = await getRemainingSearches();
     if (remaining === 0) {
       logActivity("info", "Skipping PC searches — already complete");
@@ -97,11 +95,8 @@ async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActiv
 
   const state: BotState = {
     isRunning: true,
-    mode: "pc",
     currentIndex: 0,
     total: remaining,
-    modes: ["pc"],
-    currentModeIndex: 0,
     tabId,
     groupId,
   };
@@ -223,7 +218,7 @@ async function stopSearches(): Promise<void> {
 chrome.runtime.onMessage.addListener(
   (message: PopupToWorkerMessage, _sender, sendResponse) => {
     if (message.action === "start") {
-      startSearches(message.modes, message.dailyCards, message.moreActivities, message.exploreBing)
+      startSearches(message.pcSearches, message.dailyCards, message.moreActivities, message.exploreBing)
         .then(() => sendResponse({ ok: true }))
         .catch((err) => sendResponse({ ok: false, error: String(err) }));
       return true;
