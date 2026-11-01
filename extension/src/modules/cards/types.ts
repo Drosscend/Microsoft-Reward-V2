@@ -1,23 +1,22 @@
 // Module-private types for card processing
 
-import type { BotState, DailyCardsState } from "../../shared/types";
+import type { CardTarget } from "../../shared/types";
 
 export type StateKey = "dailyCards" | "moreActivities" | "exploreBing";
 
 export interface CardSectionConfig {
-  containerSelector: string;
-  renderCheckSelector: string;
+  // Rewards page that renders the section (e.g., /dashboard, /earn)
+  pageUrl: string;
+  sectionSelector: string;
   stateKey: StateKey;
   label: string;
-  // API promotion names that are incomplete + have points (matched via data-bi-id)
-  actionableNames: string[];
+  // API promotions that are incomplete + have points (matched via link href)
+  targets: CardTarget[];
   // Optional: handler called when a new tab opens (for explore cards that need a search)
   onNewTab?: (newTabId: number, cardName: string) => Promise<void>;
 }
 
-export interface CardInfo {
-  index: number;
-  dataBiId: string;
-  x: number;
-  y: number;
+export interface CardLink {
+  href: string;
+  text: string;
 }

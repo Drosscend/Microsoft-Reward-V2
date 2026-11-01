@@ -2,6 +2,8 @@
 
 export interface Promotion {
   name: string;
+  title: string;
+  destinationUrl: string;
   complete: boolean;
   pointProgressMax: number;
   pointProgress: number;

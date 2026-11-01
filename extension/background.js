@@ -149,21 +149,36 @@ async function updateState(fn) {
   return result;
 }
 // src/modules/cards/card-processor.ts
-async function waitForSectionRender(tabId, selector) {
+var DASHBOARD_URL = "https://rewards.bing.com/dashboard";
+var EARN_URL = "https://rewards.bing.com/earn";
+async function evaluate(tabId, expression) {
+  const result = await cdpSend(tabId, "Runtime.evaluate", {
+    expression,
+    returnByValue: true
+  });
+  return result?.result?.value;
+}
+function visibleLinksExpression(sectionSelector) {
+  return `[...document.querySelectorAll('${sectionSelector}')]
+    .find((s) => s.getClientRects().length > 0)
+    ?.querySelectorAll('a[href]')
+    ?? []`;
+}
+function normalizeText(text) {
+  return text.replace(/[​-‍﻿]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+async function waitForSectionRender(tabId, sectionSelector) {
   const maxWait = 1e4;
   const interval = 500;
   let elapsed = 0;
   while (elapsed < maxWait) {
-    const result = await cdpSend(tabId, "Runtime.evaluate", {
-      expression: `!!document.querySelector('${selector}')`,
-      returnByValue: true
-    });
-    if (result?.result?.value)
+    const rendered = await evaluate(tabId, `[...${visibleLinksExpression(sectionSelector)}].some((a) => a.getClientRects().length > 0)`);
+    if (rendered)
       return;
     await new Promise((r) => setTimeout(r, interval));
     elapsed += interval;
   }
-  throw new Error(`Section "${selector}" did not render within 10s`);
+  throw new Error(`Section "${sectionSelector}" did not render within 10s`);
 }
 async function waitForTabComplete(tabId, timeout = 15000) {
   const interval = 500;
@@ -176,60 +191,46 @@ async function waitForTabComplete(tabId, timeout = 15000) {
     elapsed += interval;
   }
 }
-async function discoverCards(tabId, containerSelector) {
-  const result = await cdpSend(tabId, "Runtime.evaluate", {
-    expression: `(() => {
-      const container = document.querySelector('${containerSelector}');
-      if (!container) return [];
-      const cards = container.querySelectorAll('mee-card');
-      return Array.from(cards).map((card, i) => {
-        const rewardable = card.querySelector('[data-bi-id]');
-        const dataBiId = rewardable ? rewardable.getAttribute('data-bi-id') : '';
-        const link = card.querySelector('a.ds-card-sec') || card.querySelector('a');
-        if (!link) return { index: i, dataBiId: dataBiId || '', x: 0, y: 0 };
-        const rect = link.getBoundingClientRect();
-        return {
-          index: i,
-          dataBiId: dataBiId || '',
-          x: Math.round(rect.left + rect.width / 2),
-          y: Math.round(rect.top + rect.height / 2),
-        };
-      });
-    })()`,
-    returnByValue: true
-  });
-  return result?.result?.value ?? [];
+async function discoverLinks(tabId, sectionSelector) {
+  const links = await evaluate(tabId, `[...${visibleLinksExpression(sectionSelector)}]
+      .filter((a) => a.getClientRects().length > 0)
+      .map((a) => ({ href: a.getAttribute('href'), text: a.innerText }))`);
+  return links ?? [];
 }
-async function getCardCoordinates(tabId, containerSelector, cardIndex) {
-  const result = await cdpSend(tabId, "Runtime.evaluate", {
-    expression: `(() => {
-      const container = document.querySelector('${containerSelector}');
-      if (!container) return { x: 0, y: 0 };
-      const cards = container.querySelectorAll('mee-card');
-      const card = cards[${cardIndex}];
-      if (!card) return { x: 0, y: 0 };
-      const link = card.querySelector('a.ds-card-sec') || card.querySelector('a');
+function matchTargets(links, targets) {
+  const used = new Set;
+  const matches = [];
+  for (const target of targets) {
+    const candidates = links.map((link, i) => ({ link, i })).filter(({ link, i }) => link.href === target.url && !used.has(i));
+    const title = normalizeText(target.title);
+    const byTitle = candidates.filter(({ link }) => normalizeText(link.text).includes(title));
+    const match = byTitle[0] ?? (candidates.length === 1 ? candidates[0] : undefined);
+    if (match) {
+      used.add(match.i);
+      matches.push({ linkIndex: match.i, target });
+    } else {
+      console.warn(`[MSR] No card link found for ${target.name}`);
+    }
+  }
+  return matches;
+}
+async function getLinkCoordinates(tabId, sectionSelector, linkIndex) {
+  const coords = await evaluate(tabId, `(() => {
+      const link = [...${visibleLinksExpression(sectionSelector)}]
+        .filter((a) => a.getClientRects().length > 0)[${linkIndex}];
       if (!link) return { x: 0, y: 0 };
       const rect = link.getBoundingClientRect();
       return {
         x: Math.round(rect.left + rect.width / 2),
         y: Math.round(rect.top + rect.height / 2),
       };
-    })()`,
-    returnByValue: true
-  });
-  return result?.result?.value ?? { x: 0, y: 0 };
+    })()`);
+  return coords ?? { x: 0, y: 0 };
 }
-async function scrollCardIntoView(tabId, containerSelector, cardIndex) {
-  await cdpSend(tabId, "Runtime.evaluate", {
-    expression: `(() => {
-      const container = document.querySelector('${containerSelector}');
-      if (!container) return;
-      const cards = container.querySelectorAll('mee-card');
-      const card = cards[${cardIndex}];
-      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    })()`
-  });
+async function scrollLinkIntoView(tabId, sectionSelector, linkIndex) {
+  await evaluate(tabId, `[...${visibleLinksExpression(sectionSelector)}]
+      .filter((a) => a.getClientRects().length > 0)[${linkIndex}]
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' })`);
 }
 async function cdpClick(tabId, x, y) {
   await cdpSend(tabId, "Input.dispatchMouseEvent", {
@@ -256,15 +257,13 @@ async function cdpClick(tabId, x, y) {
 function setCardState(state, key, value) {
   return { ...state, [key]: value };
 }
-async function performCardSection(tabId, config, needsNavigation) {
-  const { containerSelector, renderCheckSelector, stateKey, label, actionableNames } = config;
+async function performCardSection(tabId, config) {
+  const { pageUrl, sectionSelector, stateKey, label, targets } = config;
   await logActivity("info", `Starting ${label} phase`);
-  if (needsNavigation) {
-    await cdpSend(tabId, "Page.navigate", { url: "https://rewards.bing.com" });
-    await waitForPageLoad(tabId);
-  }
+  await cdpSend(tabId, "Page.navigate", { url: pageUrl });
+  await waitForPageLoad(tabId);
   try {
-    await waitForSectionRender(tabId, renderCheckSelector);
+    await waitForSectionRender(tabId, sectionSelector);
   } catch (e) {
     console.warn(`[MSR] ${label} not found, skipping:`, e);
     await updateState((s) => {
@@ -278,9 +277,9 @@ async function performCardSection(tabId, config, needsNavigation) {
     return;
   }
   await new Promise((r) => setTimeout(r, randomInt(500, 1000)));
-  const cards = await discoverCards(tabId, containerSelector);
-  const actionableCards = cards.filter((c) => actionableNames.includes(c.dataBiId));
-  await logActivity("info", `Found ${actionableCards.length} actionable ${label} (${cards.length} in DOM)`);
+  const links = await discoverLinks(tabId, sectionSelector);
+  const actionableCards = matchTargets(links, targets);
+  await logActivity("info", `Found ${actionableCards.length}/${targets.length} actionable ${label} (${links.length} links in DOM)`);
   await updateState((s) => setCardState(s, stateKey, {
     isActive: true,
     currentCard: 0,
@@ -299,13 +298,13 @@ async function performCardSection(tabId, config, needsNavigation) {
     return;
   }
   for (let i = 0;i < actionableCards.length; i++) {
-    const card = actionableCards[i];
+    const { linkIndex, target } = actionableCards[i];
     try {
-      await scrollCardIntoView(tabId, containerSelector, card.index);
+      await scrollLinkIntoView(tabId, sectionSelector, linkIndex);
       await new Promise((r) => setTimeout(r, randomInt(300, 600)));
-      const coords = await getCardCoordinates(tabId, containerSelector, card.index);
+      const coords = await getLinkCoordinates(tabId, sectionSelector, linkIndex);
       if (coords.x === 0 && coords.y === 0) {
-        console.warn(`[MSR] Could not get coordinates for ${label} card ${card.index}, skipping`);
+        console.warn(`[MSR] Could not get coordinates for ${label} card ${target.name}, skipping`);
         continue;
       }
       const tabsBefore = (await chrome.tabs.query({})).map((t) => t.id);
@@ -317,7 +316,7 @@ async function performCardSection(tabId, config, needsNavigation) {
       if (newTab?.id) {
         await waitForTabComplete(newTab.id);
         if (config.onNewTab) {
-          await config.onNewTab(newTab.id, card.dataBiId);
+          await config.onNewTab(newTab.id, target.name);
         } else {
           await new Promise((r) => setTimeout(r, randomInt(3000, 6000)));
         }
@@ -329,10 +328,10 @@ async function performCardSection(tabId, config, needsNavigation) {
       } else {
         await waitForPageLoad(tabId);
         await new Promise((r) => setTimeout(r, randomInt(3000, 6000)));
-        await cdpSend(tabId, "Page.navigate", { url: "https://rewards.bing.com" });
+        await cdpSend(tabId, "Page.navigate", { url: pageUrl });
         await waitForPageLoad(tabId);
         try {
-          await waitForSectionRender(tabId, renderCheckSelector);
+          await waitForSectionRender(tabId, sectionSelector);
         } catch {
           console.warn(`[MSR] ${label} not found after navigating back`);
         }
@@ -350,7 +349,7 @@ async function performCardSection(tabId, config, needsNavigation) {
         await new Promise((r) => setTimeout(r, randomInt(2000, 4000)));
       }
     } catch (error) {
-      logActivity("error", `Error processing ${label} card ${card.dataBiId}: ${error}`);
+      logActivity("error", `Error processing ${label} card ${target.name}: ${error}`);
     }
   }
   await updateState((s) => {
@@ -363,31 +362,31 @@ async function performCardSection(tabId, config, needsNavigation) {
   });
   await logActivity("info", `${label} phase complete`);
 }
-async function performDailyCards(tabId, actionableNames) {
-  if (actionableNames.length === 0) {
+async function performDailyCards(tabId, targets) {
+  if (targets.length === 0) {
     logActivity("info", "Daily cards: nothing actionable");
     return;
   }
   await performCardSection(tabId, {
-    containerSelector: "#daily-sets mee-card-group:not(.ng-hide)",
-    renderCheckSelector: "#daily-sets mee-card-group mee-card",
+    pageUrl: DASHBOARD_URL,
+    sectionSelector: "section#dailyset",
     stateKey: "dailyCards",
     label: "Daily cards",
-    actionableNames
-  }, true);
+    targets
+  });
 }
-async function performMoreActivities(tabId, actionableNames) {
-  if (actionableNames.length === 0) {
+async function performMoreActivities(tabId, targets) {
+  if (targets.length === 0) {
     logActivity("info", "More activities: nothing actionable");
     return;
   }
   await performCardSection(tabId, {
-    containerSelector: "#more-activities",
-    renderCheckSelector: "#more-activities mee-card",
+    pageUrl: EARN_URL,
+    sectionSelector: "section#moreactivities",
     stateKey: "moreActivities",
     label: "More activities",
-    actionableNames
-  }, false);
+    targets
+  });
 }
 // src/modules/cards/explore-bing.ts
 var EXPLORE_SEARCH_MAP = {
@@ -400,10 +399,13 @@ var EXPLORE_SEARCH_MAP = {
   bank_accounts: "best savings bank accounts",
   rental_cars: "car rental deals near me",
   beauty_and_hair_products: "best beauty products",
-  all_inclusive_resorts: "all inclusive resort vacation deals"
+  all_inclusive_resorts: "all inclusive resort vacation deals",
+  couponcodes: "coupon codes and discounts",
+  creditcards: "best credit cards rewards",
+  insurance: "best insurance plans comparison"
 };
 function getSearchQueryForExplore(apiName) {
-  const match = apiName.match(/_task\d+_(.+?)_exploreonbing_/);
+  const match = apiName.match(/_([a-z]+(?:_[a-z]+)*)_exploreonbing_/i);
   if (!match)
     return "trending topics today";
   const rawTopic = match[1].toLowerCase();
@@ -434,23 +436,23 @@ async function searchInNewTab(newTabId, query) {
     } catch {}
   }
 }
-async function performExploreBing(tabId, actionableNames) {
-  if (actionableNames.length === 0) {
+async function performExploreBing(tabId, targets) {
+  if (targets.length === 0) {
     logActivity("info", "Explore Bing: nothing actionable");
     return;
   }
   await performCardSection(tabId, {
-    containerSelector: "#explore-on-bing",
-    renderCheckSelector: "#explore-on-bing mee-card",
+    pageUrl: EARN_URL,
+    sectionSelector: "section#exploreonbing",
     stateKey: "exploreBing",
     label: "Explore Bing",
-    actionableNames,
+    targets,
     onNewTab: async (newTabId, cardName) => {
       const query = getSearchQueryForExplore(cardName);
       await logActivity("info", `Searching: "${query}"`);
       await searchInNewTab(newTabId, query);
     }
-  }, false);
+  });
 }
 // src/modules/icon/icon.ts
 var SIZES = [16, 32];
@@ -539,7 +541,7 @@ function isVisiblePromo(name, userLang) {
     return true;
   if (userLang && name.startsWith(userLang))
     return true;
-  const localeMatch = name.match(/^([A-Z]{2})[A-Z_]/);
+  const localeMatch = name.match(/^([A-Z]{2})[A-Z]{2}_/);
   if (localeMatch && userLang && localeMatch[1] !== userLang)
     return false;
   return true;
@@ -549,6 +551,9 @@ function isExploreBingPromo(name) {
 }
 function isLockedPromo(promo) {
   return promo.attributes?.is_unlocked === "False";
+}
+function toCardTarget(promo) {
+  return { name: promo.name, title: promo.title, url: promo.destinationUrl };
 }
 async function fetchRewardsInfo() {
   try {
@@ -638,7 +643,7 @@ async function fetchCardFilters() {
       if (todayPromos) {
         for (const promo of todayPromos) {
           if (!promo.complete && promo.pointProgressMax > 0) {
-            dailyCards.push(promo.name);
+            dailyCards.push(toCardTarget(promo));
           }
         }
         await logActivity("info", `Daily cards: ${dailyCards.length}/${todayPromos.length} actionable`);
@@ -654,9 +659,9 @@ async function fetchCardFilters() {
       for (const promo of morePromotions) {
         if (!promo.complete && promo.pointProgressMax > 0 && !isLockedPromo(promo)) {
           if (isExploreBingPromo(promo.name)) {
-            exploreBing.push(promo.name);
+            exploreBing.push(toCardTarget(promo));
           } else if (isVisiblePromo(promo.name, userLang)) {
-            moreActivities.push(promo.name);
+            moreActivities.push(toCardTarget(promo));
           }
         }
       }
@@ -1084,12 +1089,6 @@ async function startSearches(modes, dailyCards, moreActivities, exploreBing) {
         dailyCards: s.dailyCards ? { ...s.dailyCards, isActive: false } : { isActive: false, currentCard: 0, totalCards: 0 }
       }));
     }
-  }
-  const needsRewardsNav = moreActivities || exploreBing;
-  const dailyCardsNavigated = dailyCards && (cardFilters?.dailyCards ?? []).length > 0;
-  if (needsRewardsNav && !dailyCardsNavigated) {
-    await cdpSend(tabId, "Page.navigate", { url: "https://rewards.bing.com" });
-    await waitForPageLoad(tabId);
   }
   if (moreActivities) {
     const names = cardFilters?.moreActivities ?? [];

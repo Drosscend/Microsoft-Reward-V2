@@ -1,36 +1,60 @@
 // Card section automation: clicks reward cards on rewards.bing.com
-// Handles both "daily-sets" and "more-activities" sections
+// Handles the "dailyset" (/dashboard), "moreactivities" and "exploreonbing" (/earn) sections
 
 import { cdpSend, waitForPageLoad } from "../cdp";
 import { logActivity } from "../logger";
 import { updateState } from "../state";
 import { randomInt } from "../../shared/utils";
-import type { BotState, DailyCardsState } from "../../shared/types";
-import type { StateKey, CardSectionConfig, CardInfo } from "./types";
+import type { BotState, CardTarget, DailyCardsState } from "../../shared/types";
+import type { StateKey, CardSectionConfig, CardLink } from "./types";
+
+const DASHBOARD_URL = "https://rewards.bing.com/dashboard";
+export const EARN_URL = "https://rewards.bing.com/earn";
 
 // --- Shared helpers ---
 
+async function evaluate<T>(tabId: number, expression: string): Promise<T | undefined> {
+  const result = (await cdpSend(tabId, "Runtime.evaluate", {
+    expression,
+    returnByValue: true,
+  })) as { result?: { value?: T } };
+  return result?.result?.value;
+}
+
+// The page streams its sections: hidden copies sit in `div[hidden]` until React swaps them in,
+// so only the rendered section and its visible links count.
+function visibleLinksExpression(sectionSelector: string): string {
+  return `[...document.querySelectorAll('${sectionSelector}')]
+    .find((s) => s.getClientRects().length > 0)
+    ?.querySelectorAll('a[href]')
+    ?? []`;
+}
+
+function normalizeText(text: string): string {
+  return text.replace(/[​-‍﻿]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
 async function waitForSectionRender(
   tabId: number,
-  selector: string,
+  sectionSelector: string,
 ): Promise<void> {
   const maxWait = 10_000;
   const interval = 500;
   let elapsed = 0;
 
   while (elapsed < maxWait) {
-    const result = (await cdpSend(tabId, "Runtime.evaluate", {
-      expression: `!!document.querySelector('${selector}')`,
-      returnByValue: true,
-    })) as { result?: { value?: boolean } };
+    const rendered = await evaluate<boolean>(
+      tabId,
+      `[...${visibleLinksExpression(sectionSelector)}].some((a) => a.getClientRects().length > 0)`,
+    );
 
-    if (result?.result?.value) return;
+    if (rendered) return;
 
     await new Promise((r) => setTimeout(r, interval));
     elapsed += interval;
   }
 
-  throw new Error(`Section "${selector}" did not render within 10s`);
+  throw new Error(`Section "${sectionSelector}" did not render within 10s`);
 }
 
 async function waitForTabComplete(tabId: number, timeout = 15_000): Promise<void> {
@@ -45,48 +69,57 @@ async function waitForTabComplete(tabId: number, timeout = 15_000): Promise<void
   }
 }
 
-async function discoverCards(
+async function discoverLinks(
   tabId: number,
-  containerSelector: string,
-): Promise<CardInfo[]> {
-  const result = (await cdpSend(tabId, "Runtime.evaluate", {
-    expression: `(() => {
-      const container = document.querySelector('${containerSelector}');
-      if (!container) return [];
-      const cards = container.querySelectorAll('mee-card');
-      return Array.from(cards).map((card, i) => {
-        const rewardable = card.querySelector('[data-bi-id]');
-        const dataBiId = rewardable ? rewardable.getAttribute('data-bi-id') : '';
-        const link = card.querySelector('a.ds-card-sec') || card.querySelector('a');
-        if (!link) return { index: i, dataBiId: dataBiId || '', x: 0, y: 0 };
-        const rect = link.getBoundingClientRect();
-        return {
-          index: i,
-          dataBiId: dataBiId || '',
-          x: Math.round(rect.left + rect.width / 2),
-          y: Math.round(rect.top + rect.height / 2),
-        };
-      });
-    })()`,
-    returnByValue: true,
-  })) as { result?: { value?: CardInfo[] } };
-
-  return result?.result?.value ?? [];
+  sectionSelector: string,
+): Promise<CardLink[]> {
+  const links = await evaluate<CardLink[]>(
+    tabId,
+    `[...${visibleLinksExpression(sectionSelector)}]
+      .filter((a) => a.getClientRects().length > 0)
+      .map((a) => ({ href: a.getAttribute('href'), text: a.innerText }))`,
+  );
+  return links ?? [];
 }
 
-async function getCardCoordinates(
+// Match each API promotion to a link by its destination URL. Several cards can share a URL
+// (explore cards all point to bing.com), so the card title breaks ties.
+function matchTargets(
+  links: CardLink[],
+  targets: CardTarget[],
+): { linkIndex: number; target: CardTarget }[] {
+  const used = new Set<number>();
+  const matches: { linkIndex: number; target: CardTarget }[] = [];
+
+  for (const target of targets) {
+    const candidates = links
+      .map((link, i) => ({ link, i }))
+      .filter(({ link, i }) => link.href === target.url && !used.has(i));
+    const title = normalizeText(target.title);
+    const byTitle = candidates.filter(({ link }) => normalizeText(link.text).includes(title));
+    const match = byTitle[0] ?? (candidates.length === 1 ? candidates[0] : undefined);
+
+    if (match) {
+      used.add(match.i);
+      matches.push({ linkIndex: match.i, target });
+    } else {
+      console.warn(`[MSR] No card link found for ${target.name}`);
+    }
+  }
+
+  return matches;
+}
+
+async function getLinkCoordinates(
   tabId: number,
-  containerSelector: string,
-  cardIndex: number,
+  sectionSelector: string,
+  linkIndex: number,
 ): Promise<{ x: number; y: number }> {
-  const result = (await cdpSend(tabId, "Runtime.evaluate", {
-    expression: `(() => {
-      const container = document.querySelector('${containerSelector}');
-      if (!container) return { x: 0, y: 0 };
-      const cards = container.querySelectorAll('mee-card');
-      const card = cards[${cardIndex}];
-      if (!card) return { x: 0, y: 0 };
-      const link = card.querySelector('a.ds-card-sec') || card.querySelector('a');
+  const coords = await evaluate<{ x: number; y: number }>(
+    tabId,
+    `(() => {
+      const link = [...${visibleLinksExpression(sectionSelector)}]
+        .filter((a) => a.getClientRects().length > 0)[${linkIndex}];
       if (!link) return { x: 0, y: 0 };
       const rect = link.getBoundingClientRect();
       return {
@@ -94,26 +127,21 @@ async function getCardCoordinates(
         y: Math.round(rect.top + rect.height / 2),
       };
     })()`,
-    returnByValue: true,
-  })) as { result?: { value?: { x: number; y: number } } };
-
-  return result?.result?.value ?? { x: 0, y: 0 };
+  );
+  return coords ?? { x: 0, y: 0 };
 }
 
-async function scrollCardIntoView(
+async function scrollLinkIntoView(
   tabId: number,
-  containerSelector: string,
-  cardIndex: number,
+  sectionSelector: string,
+  linkIndex: number,
 ): Promise<void> {
-  await cdpSend(tabId, "Runtime.evaluate", {
-    expression: `(() => {
-      const container = document.querySelector('${containerSelector}');
-      if (!container) return;
-      const cards = container.querySelectorAll('mee-card');
-      const card = cards[${cardIndex}];
-      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    })()`,
-  });
+  await evaluate(
+    tabId,
+    `[...${visibleLinksExpression(sectionSelector)}]
+      .filter((a) => a.getClientRects().length > 0)[${linkIndex}]
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' })`,
+  );
 }
 
 async function cdpClick(tabId: number, x: number, y: number): Promise<void> {
@@ -153,21 +181,17 @@ function setCardState(
 export async function performCardSection(
   tabId: number,
   config: CardSectionConfig,
-  needsNavigation: boolean,
 ): Promise<void> {
-  const { containerSelector, renderCheckSelector, stateKey, label, actionableNames } = config;
+  const { pageUrl, sectionSelector, stateKey, label, targets } = config;
 
   await logActivity("info", `Starting ${label} phase`);
 
-  // Navigate to rewards page if needed
-  if (needsNavigation) {
-    await cdpSend(tabId, "Page.navigate", { url: "https://rewards.bing.com" });
-    await waitForPageLoad(tabId);
-  }
+  await cdpSend(tabId, "Page.navigate", { url: pageUrl });
+  await waitForPageLoad(tabId);
 
   // Wait for section to render
   try {
-    await waitForSectionRender(tabId, renderCheckSelector);
+    await waitForSectionRender(tabId, sectionSelector);
   } catch (e) {
     console.warn(`[MSR] ${label} not found, skipping:`, e);
     await updateState((s) => {
@@ -184,12 +208,12 @@ export async function performCardSection(
   // Small extra delay for full render
   await new Promise((r) => setTimeout(r, randomInt(500, 1000)));
 
-  // Discover cards from DOM, match against API actionable names via data-bi-id
-  const cards = await discoverCards(tabId, containerSelector);
+  // Discover card links from DOM, match against API actionable promotions via href
+  const links = await discoverLinks(tabId, sectionSelector);
 
-  const actionableCards = cards.filter((c) => actionableNames.includes(c.dataBiId));
+  const actionableCards = matchTargets(links, targets);
 
-  await logActivity("info", `Found ${actionableCards.length} actionable ${label} (${cards.length} in DOM)`);
+  await logActivity("info", `Found ${actionableCards.length}/${targets.length} actionable ${label} (${links.length} links in DOM)`);
 
   await updateState((s) =>
     setCardState(s, stateKey, {
@@ -213,17 +237,17 @@ export async function performCardSection(
   }
 
   for (let i = 0; i < actionableCards.length; i++) {
-    const card = actionableCards[i];
+    const { linkIndex, target } = actionableCards[i];
 
     try {
       // Scroll card into view
-      await scrollCardIntoView(tabId, containerSelector, card.index);
+      await scrollLinkIntoView(tabId, sectionSelector, linkIndex);
       await new Promise((r) => setTimeout(r, randomInt(300, 600)));
 
       // Re-query coordinates after scroll
-      const coords = await getCardCoordinates(tabId, containerSelector, card.index);
+      const coords = await getLinkCoordinates(tabId, sectionSelector, linkIndex);
       if (coords.x === 0 && coords.y === 0) {
-        console.warn(`[MSR] Could not get coordinates for ${label} card ${card.index}, skipping`);
+        console.warn(`[MSR] Could not get coordinates for ${label} card ${target.name}, skipping`);
         continue;
       }
 
@@ -247,7 +271,7 @@ export async function performCardSection(
 
         if (config.onNewTab) {
           // Custom handler (e.g., explore cards need to perform a search)
-          await config.onNewTab(newTab.id, card.dataBiId);
+          await config.onNewTab(newTab.id, target.name);
         } else {
           // Default: just dwell
           await new Promise((r) => setTimeout(r, randomInt(3000, 6000)));
@@ -259,16 +283,15 @@ export async function performCardSection(
           console.warn("[MSR] Could not close card tab:", e);
         }
       } else {
-        // Same-tab navigation — wait, dwell, go back to rewards
+        // Same-tab navigation — wait, dwell, go back to the section's page
         await waitForPageLoad(tabId);
         await new Promise((r) => setTimeout(r, randomInt(3000, 6000)));
 
-        // Navigate back to rewards page
-        await cdpSend(tabId, "Page.navigate", { url: "https://rewards.bing.com" });
+        await cdpSend(tabId, "Page.navigate", { url: pageUrl });
         await waitForPageLoad(tabId);
 
         try {
-          await waitForSectionRender(tabId, renderCheckSelector);
+          await waitForSectionRender(tabId, sectionSelector);
         } catch {
           console.warn(`[MSR] ${label} not found after navigating back`);
         }
@@ -290,7 +313,7 @@ export async function performCardSection(
         await new Promise((r) => setTimeout(r, randomInt(2000, 4000)));
       }
     } catch (error) {
-      logActivity("error", `Error processing ${label} card ${card.dataBiId}: ${error}`);
+      logActivity("error", `Error processing ${label} card ${target.name}: ${error}`);
       // Continue to next card
     }
   }
@@ -310,32 +333,32 @@ export async function performCardSection(
 
 // --- Public API ---
 
-export async function performDailyCards(tabId: number, actionableNames: string[]): Promise<void> {
-  if (actionableNames.length === 0) {
+export async function performDailyCards(tabId: number, targets: CardTarget[]): Promise<void> {
+  if (targets.length === 0) {
     logActivity("info", "Daily cards: nothing actionable");
     return;
   }
 
   await performCardSection(tabId, {
-    containerSelector: "#daily-sets mee-card-group:not(.ng-hide)",
-    renderCheckSelector: "#daily-sets mee-card-group mee-card",
+    pageUrl: DASHBOARD_URL,
+    sectionSelector: "section#dailyset",
     stateKey: "dailyCards",
     label: "Daily cards",
-    actionableNames,
-  }, true);
+    targets,
+  });
 }
 
-export async function performMoreActivities(tabId: number, actionableNames: string[]): Promise<void> {
-  if (actionableNames.length === 0) {
+export async function performMoreActivities(tabId: number, targets: CardTarget[]): Promise<void> {
+  if (targets.length === 0) {
     logActivity("info", "More activities: nothing actionable");
     return;
   }
 
   await performCardSection(tabId, {
-    containerSelector: "#more-activities",
-    renderCheckSelector: "#more-activities mee-card",
+    pageUrl: EARN_URL,
+    sectionSelector: "section#moreactivities",
     stateKey: "moreActivities",
     label: "More activities",
-    actionableNames,
-  }, false);
+    targets,
+  });
 }

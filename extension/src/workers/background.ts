@@ -1,6 +1,6 @@
 // Service worker: orchestration via chrome.debugger CDP
 
-import { cdpSend, waitForPageLoad } from "../modules/cdp";
+import { cdpSend } from "../modules/cdp";
 import { performDailyCards, performExploreBing, performMoreActivities } from "../modules/cards";
 import { setIconDefault, setIconRunning } from "../modules/icon";
 import { clearActivityLog, logActivity } from "../modules/logger";
@@ -137,16 +137,6 @@ async function startSearches(modes: SearchMode[], dailyCards: boolean, moreActiv
           : { isActive: false, currentCard: 0, totalCards: 0 },
       }));
     }
-  }
-
-  // Navigate to rewards page once for all card phases that need it.
-  // Daily cards navigates only when it has actionable items — if it returned
-  // early (0 actionable), we still need to navigate for the remaining phases.
-  const needsRewardsNav = moreActivities || exploreBing;
-  const dailyCardsNavigated = dailyCards && (cardFilters?.dailyCards ?? []).length > 0;
-  if (needsRewardsNav && !dailyCardsNavigated) {
-    await cdpSend(tabId, "Page.navigate", { url: "https://rewards.bing.com" });
-    await waitForPageLoad(tabId);
   }
 
   if (moreActivities) {

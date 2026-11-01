@@ -1,7 +1,7 @@
 // Microsoft Rewards API interaction
 
 import { logActivity } from "../logger";
-import type { CardFilters, RewardsInfo } from "../../shared/types";
+import type { CardFilters, CardTarget, RewardsInfo } from "../../shared/types";
 import type { Promotion } from "./types";
 
 const FALLBACK_PC_SEARCHES = 30;
@@ -24,12 +24,12 @@ function getUserLanguage(promos: Promotion[]): string | null {
 function isVisiblePromo(name: string, userLang: string | null): boolean {
   if (/^(WW_|Global_|NonEN_)/.test(name)) return true;
   if (userLang && name.startsWith(userLang)) return true;
-  const localeMatch = name.match(/^([A-Z]{2})[A-Z_]/);
+  const localeMatch = name.match(/^([A-Z]{2})[A-Z]{2}_/);
   if (localeMatch && userLang && localeMatch[1] !== userLang) return false;
   return true;
 }
 
-// Check if a promotion is an "explore on Bing" task (rendered in #explore-on-bing section)
+// Check if a promotion is an "explore on Bing" task (rendered in section#exploreonbing on /earn)
 function isExploreBingPromo(name: string): boolean {
   return name.includes("_exploreonbing_");
 }
@@ -37,6 +37,10 @@ function isExploreBingPromo(name: string): boolean {
 // Check if a promotion is locked (e.g., available only on a specific day)
 function isLockedPromo(promo: Promotion): boolean {
   return promo.attributes?.is_unlocked === "False";
+}
+
+function toCardTarget(promo: Promotion): CardTarget {
+  return { name: promo.name, title: promo.title, url: promo.destinationUrl };
 }
 
 export async function fetchRewardsInfo(): Promise<RewardsInfo | null> {
@@ -134,7 +138,7 @@ export async function fetchCardFilters(): Promise<CardFilters> {
     }
 
     // Daily cards: find today's incomplete promotions with points
-    const dailyCards: string[] = [];
+    const dailyCards: CardTarget[] = [];
     const dailySetPromotions = dashboard.dailySetPromotions;
     if (dailySetPromotions) {
       const today = new Date();
@@ -144,7 +148,7 @@ export async function fetchCardFilters(): Promise<CardFilters> {
       if (todayPromos) {
         for (const promo of todayPromos) {
           if (!promo.complete && promo.pointProgressMax > 0) {
-            dailyCards.push(promo.name);
+            dailyCards.push(toCardTarget(promo));
           }
         }
         await logActivity("info", `Daily cards: ${dailyCards.length}/${todayPromos.length} actionable`);
@@ -154,8 +158,8 @@ export async function fetchCardFilters(): Promise<CardFilters> {
     }
 
     // More activities + explore on bing: split by promo type
-    const moreActivities: string[] = [];
-    const exploreBing: string[] = [];
+    const moreActivities: CardTarget[] = [];
+    const exploreBing: CardTarget[] = [];
     const morePromotions = dashboard.morePromotions as Promotion[] | undefined;
 
     if (morePromotions) {
@@ -163,9 +167,9 @@ export async function fetchCardFilters(): Promise<CardFilters> {
       for (const promo of morePromotions) {
         if (!promo.complete && promo.pointProgressMax > 0 && !isLockedPromo(promo)) {
           if (isExploreBingPromo(promo.name)) {
-            exploreBing.push(promo.name);
+            exploreBing.push(toCardTarget(promo));
           } else if (isVisiblePromo(promo.name, userLang)) {
-            moreActivities.push(promo.name);
+            moreActivities.push(toCardTarget(promo));
           }
         }
       }

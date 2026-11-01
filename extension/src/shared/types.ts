@@ -39,10 +39,17 @@ export interface RewardsInfo {
   lastUpdated: number;
 }
 
+// An actionable promotion from the Rewards API, matched to its card link on the page
+export interface CardTarget {
+  name: string;
+  title: string;
+  url: string;
+}
+
 export interface CardFilters {
-  dailyCards: string[];
-  moreActivities: string[];
-  exploreBing: string[];
+  dailyCards: CardTarget[];
+  moreActivities: CardTarget[];
+  exploreBing: CardTarget[];
 }
 
 export type PopupToWorkerMessage =

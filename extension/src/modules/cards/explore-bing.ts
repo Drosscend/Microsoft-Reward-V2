@@ -3,7 +3,8 @@
 import { cdpSend, typeText, pressEnter, waitForPageLoad } from "../cdp";
 import { logActivity } from "../logger";
 import { randomInt } from "../../shared/utils";
-import { performCardSection } from "./card-processor";
+import type { CardTarget } from "../../shared/types";
+import { EARN_URL, performCardSection } from "./card-processor";
 
 // Known topic → search query mapping
 const EXPLORE_SEARCH_MAP: Record<string, string> = {
@@ -17,13 +18,17 @@ const EXPLORE_SEARCH_MAP: Record<string, string> = {
   rental_cars: "car rental deals near me",
   beauty_and_hair_products: "best beauty products",
   all_inclusive_resorts: "all inclusive resort vacation deals",
+  couponcodes: "coupon codes and discounts",
+  creditcards: "best credit cards rewards",
+  insurance: "best insurance plans comparison",
 };
 
 // Extract a search query from the API promotion name
 // e.g., "NonEN_moreactivities_task14_financemarket_exploreonbing_..." → "stock market prices today"
 // e.g., "ENUS_moreactivities_task35_CellPhone_Plans_exploreonbing_..." → "best cell phone plans"
+// e.g., "FRFR_couponcodes_exploreonbing_activation_Evergreen" → "coupon codes and discounts"
 function getSearchQueryForExplore(apiName: string): string {
-  const match = apiName.match(/_task\d+_(.+?)_exploreonbing_/);
+  const match = apiName.match(/_([a-z]+(?:_[a-z]+)*)_exploreonbing_/i);
   if (!match) return "trending topics today";
   const rawTopic = match[1].toLowerCase();
   if (EXPLORE_SEARCH_MAP[rawTopic]) return EXPLORE_SEARCH_MAP[rawTopic];
@@ -67,22 +72,22 @@ async function searchInNewTab(newTabId: number, query: string): Promise<void> {
   }
 }
 
-export async function performExploreBing(tabId: number, actionableNames: string[]): Promise<void> {
-  if (actionableNames.length === 0) {
+export async function performExploreBing(tabId: number, targets: CardTarget[]): Promise<void> {
+  if (targets.length === 0) {
     logActivity("info", "Explore Bing: nothing actionable");
     return;
   }
 
   await performCardSection(tabId, {
-    containerSelector: "#explore-on-bing",
-    renderCheckSelector: "#explore-on-bing mee-card",
+    pageUrl: EARN_URL,
+    sectionSelector: "section#exploreonbing",
     stateKey: "exploreBing",
     label: "Explore Bing",
-    actionableNames,
+    targets,
     onNewTab: async (newTabId, cardName) => {
       const query = getSearchQueryForExplore(cardName);
       await logActivity("info", `Searching: "${query}"`);
       await searchInNewTab(newTabId, query);
     },
-  }, false);
+  });
 }
