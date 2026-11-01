@@ -92,14 +92,8 @@ export async function performNextSearch(stopSearches: () => Promise<void>): Prom
 }
 
 // Helper to start the alarm-based search phase
-export async function startSearchPhase(remaining: number, hasCardPhases: boolean, tabId: number): Promise<void> {
+export async function startSearchPhase(remaining: number): Promise<void> {
   if (remaining > 0) {
-    // Navigate back to Bing for searches
-    if (hasCardPhases) {
-      await cdpSend(tabId, "Page.navigate", { url: "https://www.bing.com" });
-      await waitForPageLoad(tabId);
-    }
-
     await logActivity("info", `Starting PC search phase (${remaining} searches)`);
     chrome.alarms.create("next-search", { delayInMinutes: 0.01 });
   }

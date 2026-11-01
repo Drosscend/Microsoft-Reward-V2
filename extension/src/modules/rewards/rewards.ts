@@ -51,10 +51,6 @@ function progressOf(promos: Promotion[]): { current: number; target: number } {
   return { current: promos.filter((p) => p.complete).length, target: promos.length };
 }
 
-function actionable(promos: Promotion[]): CardTarget[] {
-  return promos.filter((p) => !p.complete).map(toCardTarget);
-}
-
 export async function fetchRewards(): Promise<RewardsSnapshot | null> {
   try {
     const resp = await fetch("https://rewards.bing.com/api/getuserinfo", {
@@ -101,11 +97,7 @@ export async function fetchRewards(): Promise<RewardsSnapshot | null> {
 
     return {
       info,
-      cards: {
-        dailyCards: actionable(dailyPromos),
-        moreActivities: actionable(regularPromos),
-        exploreBing: actionable(explorePromos),
-      },
+      exploreCards: explorePromos.filter((p) => !p.complete).map(toCardTarget),
       country: dashboard.userProfile?.attributes?.country ?? null,
     };
   } catch (error) {

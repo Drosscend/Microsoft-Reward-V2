@@ -6,7 +6,7 @@ export interface ActivityLogEntry {
   message: string;
 }
 
-export interface DailyCardsState {
+export interface CardPhaseState {
   isActive: boolean;
   currentCard: number;
   totalCards: number;
@@ -18,9 +18,7 @@ export interface BotState {
   total: number;
   tabId: number | null;
   groupId: number | null;
-  dailyCards?: DailyCardsState;
-  moreActivities?: DailyCardsState;
-  exploreBing?: DailyCardsState;
+  exploreBing?: CardPhaseState;
   // Set when a run was requested but every selected task was already done
   alreadyComplete?: boolean;
   error?: string;
@@ -35,7 +33,7 @@ export interface RewardsInfo {
   lastUpdated: number;
 }
 
-// An actionable promotion from the Rewards API, matched to its card link on the page
+// An actionable promotion from the Rewards API
 export interface CardTarget {
   name: string;
   title: string;
@@ -43,21 +41,15 @@ export interface CardTarget {
   url: string;
 }
 
-export interface CardFilters {
-  dailyCards: CardTarget[];
-  moreActivities: CardTarget[];
-  exploreBing: CardTarget[];
-}
-
 export interface RewardsSnapshot {
   info: RewardsInfo;
-  cards: CardFilters;
+  exploreCards: CardTarget[];
   // Rewards account country (e.g., "fr"), used to localize search terms
   country: string | null;
 }
 
 export type PopupToWorkerMessage =
-  | { action: "start"; pcSearches: boolean; dailyCards: boolean; moreActivities: boolean; exploreBing: boolean }
+  | { action: "start"; pcSearches: boolean; exploreBing: boolean }
   | { action: "stop" }
   | { action: "fetch-rewards" }
   | { action: "clear-log" };

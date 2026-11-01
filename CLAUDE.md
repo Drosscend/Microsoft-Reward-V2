@@ -43,14 +43,12 @@ extension/
         tab-manager.ts  # Tab lifecycle: ensureTab() with debugger recovery
         index.ts        # → ensureTab
       rewards/
-        rewards.ts      # Rewards API: fetchRewardsInfo(), fetchCardFilters(), getRemainingSearches()
+        rewards.ts      # Rewards API: fetchRewards() (progress + explore cards), getRemainingSearches()
         types.ts        # Module-private: Promotion interface
-        index.ts        # → fetchRewardsInfo, fetchCardFilters, getRemainingSearches
+        index.ts        # → fetchRewards, getRemainingSearches
       cards/
-        card-processor.ts  # Generic card section processor + performDailyCards, performMoreActivities
-        explore-bing.ts    # Explore Bing automation with search-in-new-tab
-        types.ts           # Module-private: StateKey, CardSectionConfig, CardInfo
-        index.ts           # → performDailyCards, performMoreActivities, performExploreBing
+        explore-bing.ts    # Explore Bing: opens each card's bing.com destination and searches its topic
+        index.ts           # → performExploreBing
       search/
         search.ts          # performNextSearch + startSearchPhase (extracted from background)
         human-behavior.ts  # Human simulation: scrolling, mouse moves, random result clicks
@@ -83,7 +81,7 @@ ui/popup.ts  ←  standalone UI entry point
 ### Data flow
 
 1. **Popup** sends `start`/`stop`/`fetch-rewards` messages to the service worker
-2. **background.ts** receives messages, calls `startSearches()` which sets up tab + debugger + state, runs card phases, then delegates to `startSearchPhase()` for alarm-based searches
+2. **background.ts** receives messages, calls `startSearches()` which sets up tab + debugger + state, runs the Explore Bing phase, then delegates to `startSearchPhase()` for alarm-based searches
 3. Each alarm triggers `performNextSearch()` (in `modules/search/`) which: gets terms → ensures tab → types search → waits for load → simulates human behavior → schedules next alarm
 4. **State** is persisted in `chrome.storage.session` — popup listens to `storage.onChanged` for live updates
 5. `updateState()` uses a Promise-chain mutex to prevent read-modify-write race conditions
@@ -91,6 +89,7 @@ ui/popup.ts  ←  standalone UI entry point
 
 ## Rules
 
+- **Rewards site**: Edge forbids extensions from scripting, debugging or calling the server actions of rewards.bing.com, so daily set and more activities stay manual (popup links)
 - **Package manager**: Always use `bun` / `bunx` — never npm, yarn, or pnpm
 - **Language**: TypeScript only, strict mode enabled
 - **Browser**: Extension runs inside Edge — uses `chrome.debugger` API for CDP, no Puppeteer

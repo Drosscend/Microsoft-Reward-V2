@@ -1,10 +1,11 @@
-// Explore Bing card automation: searches in new tabs for explore-on-bing promotions
+// Explore Bing cards: opens each card's bing.com destination in a new tab and searches its topic.
+// Edge forbids extensions from scripting rewards.bing.com, so the other card sections stay manual.
 
 import { cdpSend, typeText, pressEnter, waitForPageLoad } from "../cdp";
 import { logActivity } from "../logger";
+import { updateState } from "../state";
 import { randomInt } from "../../shared/utils";
 import type { CardTarget } from "../../shared/types";
-import { EARN_URL, performCardSection } from "./card-processor";
 
 // Build the search query from the card description, in the account language
 // e.g., "Recherchez sur Bing les derniers codes promo et réductions" → "les derniers codes promo et réductions"
@@ -54,17 +55,54 @@ async function searchInNewTab(newTabId: number, query: string): Promise<void> {
   }
 }
 
-export async function performExploreBing(tabId: number, targets: CardTarget[]): Promise<void> {
-  await performCardSection(tabId, {
-    pageUrl: EARN_URL,
-    sectionSelector: "section#exploreonbing",
-    stateKey: "exploreBing",
-    label: "Explore Bing",
-    targets,
-    onNewTab: async (newTabId, target) => {
-      const query = getSearchQueryForExplore(target);
-      await logActivity("info", `Searching: "${query}"`);
-      await searchInNewTab(newTabId, query);
-    },
-  });
+async function waitForTabComplete(tabId: number, timeout = 15_000): Promise<void> {
+  const interval = 500;
+  for (let elapsed = 0; elapsed < timeout; elapsed += interval) {
+    const tab = await chrome.tabs.get(tabId);
+    if (tab.status === "complete") return;
+    await new Promise((r) => setTimeout(r, interval));
+  }
+}
+
+async function searchExploreCard(target: CardTarget): Promise<void> {
+  const tab = await chrome.tabs.create({ url: target.url, active: true });
+  const tabId = tab.id!;
+
+  try {
+    await waitForTabComplete(tabId);
+    const query = getSearchQueryForExplore(target);
+    await logActivity("info", `Searching: "${query}"`);
+    await searchInNewTab(tabId, query);
+  } finally {
+    await chrome.tabs.remove(tabId).catch(() => console.warn("[MSR] Could not close explore tab"));
+  }
+}
+
+async function setProgress(isActive: boolean, currentCard: number, totalCards: number): Promise<void> {
+  await updateState((s) => ({ ...s, exploreBing: { isActive, currentCard, totalCards } }));
+}
+
+export async function performExploreBing(targets: CardTarget[]): Promise<void> {
+  if (targets.length === 0) {
+    await logActivity("info", "Explore Bing: nothing actionable");
+    return;
+  }
+
+  const total = targets.length;
+  await logActivity("info", "Starting Explore Bing phase");
+  await setProgress(true, 0, total);
+
+  for (let i = 0; i < total; i++) {
+    try {
+      await searchExploreCard(targets[i]);
+    } catch (error) {
+      await logActivity("error", `Explore Bing card ${targets[i].name} failed: ${error}`);
+    }
+
+    await setProgress(true, i + 1, total);
+    if (i < total - 1) await new Promise((r) => setTimeout(r, randomInt(2000, 4000)));
+  }
+
+  await setProgress(false, total, total);
+  await logActivity("info", "Explore Bing phase complete");
 }
