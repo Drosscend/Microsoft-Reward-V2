@@ -2,7 +2,9 @@
   "name": "microsoft-reward-v2",
   "type": "module",
   "scripts": {
-    "build": "cd extension && bun run build.ts"
+    "build": "cd extension && bun run build.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "devDependencies": {
     "@types/bun": "latest",
