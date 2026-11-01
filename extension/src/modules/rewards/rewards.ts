@@ -1,7 +1,6 @@
 // Microsoft Rewards API interaction
 
-import { logActivity } from "../logger";
-import type { CardFilters, CardTarget, RewardsInfo } from "../../shared/types";
+import type { CardTarget, RewardsInfo, RewardsSnapshot } from "../../shared/types";
 import type { Promotion } from "./types";
 
 const FALLBACK_PC_SEARCHES = 30;
@@ -43,7 +42,20 @@ function toCardTarget(promo: Promotion): CardTarget {
   return { name: promo.name, title: promo.title, url: promo.destinationUrl };
 }
 
-export async function fetchRewardsInfo(): Promise<RewardsInfo | null> {
+function todayKey(): string {
+  const today = new Date();
+  return `${String(today.getMonth() + 1).padStart(2, "0")}/${String(today.getDate()).padStart(2, "0")}/${today.getFullYear()}`;
+}
+
+function progressOf(promos: Promotion[]): { current: number; target: number } {
+  return { current: promos.filter((p) => p.complete).length, target: promos.length };
+}
+
+function actionable(promos: Promotion[]): CardTarget[] {
+  return promos.filter((p) => !p.complete).map(toCardTarget);
+}
+
+export async function fetchRewards(): Promise<RewardsSnapshot | null> {
   try {
     const resp = await fetch("https://rewards.bing.com/api/getuserinfo", {
       credentials: "include",
@@ -54,142 +66,55 @@ export async function fetchRewardsInfo(): Promise<RewardsInfo | null> {
     }
 
     const data = await resp.json();
-    const userStatus = data?.dashboard?.userStatus;
+    const dashboard = data?.dashboard;
+    const userStatus = dashboard?.userStatus;
     if (!userStatus) {
       console.error("[MSR] Unexpected API response shape");
       return null;
     }
 
-    const counters = userStatus.counters;
-    const pc = counters?.pcSearch?.[0];
+    const pc = userStatus.counters?.pcSearch?.[0];
 
-    // Daily cards progress: count completed vs total (only cards with points)
-    const dashboard = data?.dashboard;
-    let dailyCardsProgress: RewardsInfo["dailyCardsProgress"] = null;
-    if (dashboard?.dailySetPromotions) {
-      const today = new Date();
-      const dateKey = `${String(today.getMonth() + 1).padStart(2, "0")}/${String(today.getDate()).padStart(2, "0")}/${today.getFullYear()}`;
-      const todayPromos = dashboard.dailySetPromotions[dateKey] as Promotion[] | undefined;
-      if (todayPromos) {
-        const withPoints = todayPromos.filter((p) => p.pointProgressMax > 0);
-        dailyCardsProgress = {
-          current: withPoints.filter((p) => p.complete).length,
-          target: withPoints.length,
-        };
-      }
-    }
+    // Today's daily set: only cards with points
+    const dailyPromos = ((dashboard.dailySetPromotions?.[todayKey()] ?? []) as Promotion[])
+      .filter((p) => p.pointProgressMax > 0);
 
     // Split morePromotions into regular activities vs explore-on-bing
-    let moreActivitiesProgress: RewardsInfo["moreActivitiesProgress"] = null;
-    let exploreBingProgress: RewardsInfo["exploreBingProgress"] = null;
-    const morePromos = dashboard?.morePromotions as Promotion[] | undefined;
-    if (morePromos) {
-      const userLang = getUserLanguage(morePromos);
-      const explore = morePromos.filter((p) => p.pointProgressMax > 0 && !isLockedPromo(p) && isExploreBingPromo(p.name));
-      const regular = morePromos.filter((p) => p.pointProgressMax > 0 && !isLockedPromo(p) && !isExploreBingPromo(p.name) && isVisiblePromo(p.name, userLang));
-      moreActivitiesProgress = {
-        current: regular.filter((p) => p.complete).length,
-        target: regular.length,
-      };
-      exploreBingProgress = {
-        current: explore.filter((p) => p.complete).length,
-        target: explore.length,
-      };
-    }
+    const morePromos = ((dashboard.morePromotions ?? []) as Promotion[])
+      .filter((p) => p.pointProgressMax > 0 && !isLockedPromo(p));
+    const userLang = getUserLanguage(morePromos);
+    const explorePromos = morePromos.filter((p) => isExploreBingPromo(p.name));
+    const regularPromos = morePromos.filter((p) => !isExploreBingPromo(p.name) && isVisiblePromo(p.name, userLang));
 
     const info: RewardsInfo = {
       points: userStatus.availablePoints ?? null,
       pcProgress: pc
         ? { current: pc.pointProgress, target: pc.pointProgressMax }
         : null,
-      dailyCardsProgress,
-      moreActivitiesProgress,
-      exploreBingProgress,
+      dailyCardsProgress: progressOf(dailyPromos),
+      moreActivitiesProgress: progressOf(regularPromos),
+      exploreBingProgress: progressOf(explorePromos),
       lastUpdated: Date.now(),
     };
 
     await chrome.storage.session.set({ rewardsInfo: info });
-    return info;
+
+    return {
+      info,
+      cards: {
+        dailyCards: actionable(dailyPromos),
+        moreActivities: actionable(regularPromos),
+        exploreBing: actionable(explorePromos),
+      },
+    };
   } catch (error) {
     console.error("[MSR] Error fetching rewards info:", error);
     return null;
   }
 }
 
-export async function fetchCardFilters(): Promise<CardFilters> {
-  try {
-    const resp = await fetch("https://rewards.bing.com/api/getuserinfo", {
-      credentials: "include",
-    });
-    if (!resp.ok) {
-      console.warn("[MSR] Card filters: API returned", resp.status);
-      return { dailyCards: [], moreActivities: [], exploreBing: [] };
-    }
-
-    const data = await resp.json();
-    const dashboard = data?.dashboard;
-    if (!dashboard) {
-      console.warn("[MSR] Card filters: no dashboard in response");
-      return { dailyCards: [], moreActivities: [], exploreBing: [] };
-    }
-
-    // Daily cards: find today's incomplete promotions with points
-    const dailyCards: CardTarget[] = [];
-    const dailySetPromotions = dashboard.dailySetPromotions;
-    if (dailySetPromotions) {
-      const today = new Date();
-      const dateKey = `${String(today.getMonth() + 1).padStart(2, "0")}/${String(today.getDate()).padStart(2, "0")}/${today.getFullYear()}`;
-      const todayPromos = dailySetPromotions[dateKey] as Promotion[] | undefined;
-
-      if (todayPromos) {
-        for (const promo of todayPromos) {
-          if (!promo.complete && promo.pointProgressMax > 0) {
-            dailyCards.push(toCardTarget(promo));
-          }
-        }
-        await logActivity("info", `Daily cards: ${dailyCards.length}/${todayPromos.length} actionable`);
-      } else {
-        console.warn(`[MSR] No daily set promotions for ${dateKey}`);
-      }
-    }
-
-    // More activities + explore on bing: split by promo type
-    const moreActivities: CardTarget[] = [];
-    const exploreBing: CardTarget[] = [];
-    const morePromotions = dashboard.morePromotions as Promotion[] | undefined;
-
-    if (morePromotions) {
-      const userLang = getUserLanguage(morePromotions);
-      for (const promo of morePromotions) {
-        if (!promo.complete && promo.pointProgressMax > 0 && !isLockedPromo(promo)) {
-          if (isExploreBingPromo(promo.name)) {
-            exploreBing.push(toCardTarget(promo));
-          } else if (isVisiblePromo(promo.name, userLang)) {
-            moreActivities.push(toCardTarget(promo));
-          }
-        }
-      }
-      if (moreActivities.length > 0) {
-        await logActivity("info", `More activities: ${moreActivities.length} actionable`);
-      }
-      if (exploreBing.length > 0) {
-        await logActivity("info", `Explore Bing: ${exploreBing.length} actionable`);
-      }
-    }
-
-    return { dailyCards, moreActivities, exploreBing };
-  } catch (error) {
-    console.error("[MSR] Error fetching card filters:", error);
-    return { dailyCards: [], moreActivities: [], exploreBing: [] };
-  }
-}
-
-export async function getRemainingSearches(): Promise<number> {
-  const result = await chrome.storage.session.get("rewardsInfo");
-  const info = result.rewardsInfo as RewardsInfo | undefined;
-  if (!info) return FALLBACK_PC_SEARCHES;
-
-  const progress = info.pcProgress;
+export function getRemainingSearches(info: RewardsInfo | undefined): number {
+  const progress = info?.pcProgress;
   if (!progress) return FALLBACK_PC_SEARCHES;
 
   const remainingPoints = progress.target - progress.current;

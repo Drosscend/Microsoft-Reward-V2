@@ -2,7 +2,7 @@
 
 import { cdpSend, typeText, pressEnter, pressKey, waitForPageLoad } from "../cdp";
 import { logActivity } from "../logger";
-import { fetchRewardsInfo } from "../rewards";
+import { fetchRewards } from "../rewards";
 import { getState, updateState } from "../state";
 import { ensureTab } from "../tabs";
 import { randomInt } from "../../shared/utils";
@@ -75,7 +75,7 @@ export async function performNextSearch(stopSearches: () => Promise<void>): Prom
     await logActivity("info", `Searched: "${searchTerm}" (${updatedState.currentIndex}/${updatedState.total} PC)`);
 
     // Refresh rewards info after each search
-    fetchRewardsInfo().catch((e) => console.warn("[MSR] Background rewards refresh failed:", e));
+    fetchRewards().catch((e) => console.warn("[MSR] Background rewards refresh failed:", e));
 
     // Schedule next search with human-like delay
     chrome.alarms.create("next-search", { delayInMinutes: nextSearchDelay() });

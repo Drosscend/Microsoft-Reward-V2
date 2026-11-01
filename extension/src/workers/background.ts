@@ -4,7 +4,7 @@ import { cdpSend } from "../modules/cdp";
 import { performDailyCards, performExploreBing, performMoreActivities } from "../modules/cards";
 import { setIconDefault, setIconRunning } from "../modules/icon";
 import { clearActivityLog, logActivity } from "../modules/logger";
-import { fetchCardFilters, fetchRewardsInfo, getRemainingSearches } from "../modules/rewards";
+import { fetchRewards, getRemainingSearches } from "../modules/rewards";
 import { performNextSearch, startSearchPhase, getSearchTerms } from "../modules/search";
 import { getDefaultState, getState, setState, updateState } from "../modules/state";
 import type { BotState, PopupToWorkerMessage } from "../shared/types";
@@ -27,13 +27,13 @@ async function startSearches(pcSearches: boolean, dailyCards: boolean, moreActiv
     }
   }
 
-  // Fetch rewards info before starting
-  await fetchRewardsInfo();
+  // Fetch rewards info and actionable cards before starting
+  const rewards = await fetchRewards();
 
   // Check remaining PC searches
   let remaining = 0;
   if (pcSearches) {
-    remaining = await getRemainingSearches();
+    remaining = getRemainingSearches(rewards?.info);
     if (remaining === 0) {
       logActivity("info", "Skipping PC searches — already complete");
     }
@@ -106,8 +106,8 @@ async function startSearches(pcSearches: boolean, dailyCards: boolean, moreActiv
 
   await logActivity("info", "Bot started");
 
-  // Fetch API-based card filters (skip completed + zero-point cards)
-  const cardFilters = (dailyCards || moreActivities || exploreBing) ? await fetchCardFilters() : null;
+  // API-based card filters (skip completed + zero-point cards)
+  const cardFilters = rewards?.cards;
 
   // Run reward card phases synchronously before searches
   const hasCardPhases = dailyCards || moreActivities || exploreBing;
@@ -180,7 +180,7 @@ async function startSearches(pcSearches: boolean, dailyCards: boolean, moreActiv
 
   // Refresh rewards info after card phases so progress bars reflect completion
   if (hasCardPhases) {
-    await fetchRewardsInfo();
+    await fetchRewards();
   }
 
   // If PC searches are needed, continue with alarm-based flow
@@ -208,7 +208,7 @@ async function stopSearches(): Promise<void> {
 
   // Fetch updated rewards info BEFORE resetting state
   // so progress bars transition smoothly from bot values to API values
-  await fetchRewardsInfo();
+  await fetchRewards();
   await setState(getDefaultState());
   await setIconDefault();
 }
@@ -232,8 +232,8 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (message.action === "fetch-rewards") {
-      fetchRewardsInfo()
-        .then((info) => sendResponse({ ok: true, info }))
+      fetchRewards()
+        .then((rewards) => sendResponse({ ok: true, info: rewards?.info }))
         .catch((err) => sendResponse({ ok: false, error: String(err) }));
       return true;
     }

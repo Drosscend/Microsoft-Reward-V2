@@ -46,6 +46,11 @@ export interface CardFilters {
   exploreBing: CardTarget[];
 }
 
+export interface RewardsSnapshot {
+  info: RewardsInfo;
+  cards: CardFilters;
+}
+
 export type PopupToWorkerMessage =
   | { action: "start"; pcSearches: boolean; dailyCards: boolean; moreActivities: boolean; exploreBing: boolean }
   | { action: "stop" }

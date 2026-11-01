@@ -1,1 +1,1 @@
-export { fetchRewardsInfo, fetchCardFilters, getRemainingSearches } from "./rewards";
+export { fetchRewards, getRemainingSearches } from "./rewards";
