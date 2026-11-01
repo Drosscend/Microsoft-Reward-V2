@@ -93,7 +93,7 @@ ui/popup.ts  ←  standalone UI entry point
 - **Language**: TypeScript only, strict mode enabled
 - **Browser**: Extension runs inside Edge — uses `chrome.debugger` API for CDP, no Puppeteer
 - **User-Agent**: Never override it (no `Emulation.setUserAgentOverride`); the bot keeps the browser's native UA
-- **Search terms**: Google Trends RSS (FR) seeds expanded with Google Autocomplete, cached in session storage. No static fallback: if no terms come back, the bot refuses to start
+- **Search terms**: Google Trends RSS seeds (Rewards account country) expanded with Google Autocomplete (browser language), cached in session storage. No static fallback: if no terms come back, the bot refuses to start
 - **No credentials in code**: User must be logged in to their Microsoft account before starting — never store or automate credential entry
 - **Error handling**: Catch errors per search iteration so one failure doesn't stop the entire batch — always log with `[MSR]` prefix
 - **MV3 constraints**: All event listeners must be registered at top-level in the service worker — no lazy registration

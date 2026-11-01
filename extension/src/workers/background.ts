@@ -5,28 +5,13 @@ import { performDailyCards, performExploreBing, performMoreActivities } from "..
 import { setIconDefault, setIconRunning } from "../modules/icon";
 import { clearActivityLog, logActivity } from "../modules/logger";
 import { fetchRewards, getRemainingSearches } from "../modules/rewards";
-import { performNextSearch, startSearchPhase, getSearchTerms } from "../modules/search";
+import { loadSearchTerms, performNextSearch, startSearchPhase } from "../modules/search";
 import { getDefaultState, getState, setState, updateState } from "../modules/state";
 import type { BotState, PopupToWorkerMessage } from "../shared/types";
 
 // --- Orchestration ---
 
 async function startSearches(pcSearches: boolean, dailyCards: boolean, moreActivities: boolean, exploreBing: boolean): Promise<void> {
-  // Only fetch search terms if PC searches are requested
-  if (pcSearches) {
-    await chrome.storage.session.remove("searchTerms");
-    const terms = await getSearchTerms();
-
-    if (terms.length === 0) {
-      await logActivity("error", "Cannot start — no search terms available (all feeds failed)");
-      await setState({
-        ...getDefaultState(),
-        error: "No search terms available — check your internet connection",
-      });
-      return;
-    }
-  }
-
   // Fetch rewards info and actionable cards before starting
   const rewards = await fetchRewards();
 
@@ -36,6 +21,20 @@ async function startSearches(pcSearches: boolean, dailyCards: boolean, moreActiv
     remaining = getRemainingSearches(rewards?.info);
     if (remaining === 0) {
       logActivity("info", "Skipping PC searches — already complete");
+    }
+  }
+
+  // Only fetch search terms if PC searches are needed
+  if (remaining > 0) {
+    const terms = await loadSearchTerms(rewards?.country ?? null);
+
+    if (terms.length === 0) {
+      await logActivity("error", "Cannot start — no search terms available (all feeds failed)");
+      await setState({
+        ...getDefaultState(),
+        error: "No search terms available — check your internet connection",
+      });
+      return;
     }
   }
 

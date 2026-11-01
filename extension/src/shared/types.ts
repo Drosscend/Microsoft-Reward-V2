@@ -49,6 +49,8 @@ export interface CardFilters {
 export interface RewardsSnapshot {
   info: RewardsInfo;
   cards: CardFilters;
+  // Rewards account country (e.g., "fr"), used to localize search terms
+  country: string | null;
 }
 
 export type PopupToWorkerMessage =

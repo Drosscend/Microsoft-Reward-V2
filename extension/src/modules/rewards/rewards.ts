@@ -106,6 +106,7 @@ export async function fetchRewards(): Promise<RewardsSnapshot | null> {
         moreActivities: actionable(regularPromos),
         exploreBing: actionable(explorePromos),
       },
+      country: dashboard.userProfile?.attributes?.country ?? null,
     };
   } catch (error) {
     console.error("[MSR] Error fetching rewards info:", error);

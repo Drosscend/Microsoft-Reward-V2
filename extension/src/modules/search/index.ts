@@ -1,2 +1,2 @@
 export { performNextSearch, startSearchPhase } from "./search";
-export { getSearchTerms } from "./terms";
+export { getCachedSearchTerms, loadSearchTerms } from "./terms";

@@ -7,7 +7,7 @@ import { getState, updateState } from "../state";
 import { ensureTab } from "../tabs";
 import { randomInt } from "../../shared/utils";
 import { simulateHumanBehavior } from "./human-behavior";
-import { getSearchTerms } from "./terms";
+import { getCachedSearchTerms } from "./terms";
 
 // 80% chance: 20-90s, 20% chance: long pause 1-3min (simulates reading a result)
 function nextSearchDelay(): number {
@@ -26,7 +26,7 @@ export async function performNextSearch(stopSearches: () => Promise<void>): Prom
     return;
   }
 
-  const terms = await getSearchTerms();
+  const terms = await getCachedSearchTerms();
   if (terms.length === 0) {
     await logActivity("error", "No search terms available, stopping");
     await stopSearches();
