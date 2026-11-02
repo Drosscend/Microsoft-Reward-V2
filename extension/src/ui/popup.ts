@@ -11,6 +11,8 @@ function getElement<T extends HTMLElement>(id: string, ctor: new (...args: any[]
 }
 
 const cbPc = getElement("cb-pc", HTMLInputElement);
+const cbDailyCards = getElement("cb-daily-cards", HTMLInputElement);
+const cbMoreActivities = getElement("cb-more-activities", HTMLInputElement);
 const cbExploreBing = getElement("cb-explore-bing", HTMLInputElement);
 const actionBtn = getElement("action-btn", HTMLButtonElement);
 const statusDot = getElement("status-dot", HTMLDivElement);
@@ -18,10 +20,13 @@ const statusText = getElement("status-text", HTMLSpanElement);
 const pointsValue = getElement("points-value", HTMLDivElement);
 const pcCount = getElement("pc-count", HTMLSpanElement);
 const pcFill = getElement("pc-fill", HTMLDivElement);
+const dailyCardsRow = getElement("daily-cards-row", HTMLDivElement);
 const dailyCardsCount = getElement("daily-cards-count", HTMLSpanElement);
 const dailyCardsFill = getElement("daily-cards-fill", HTMLDivElement);
+const moreActivitiesRow = getElement("more-activities-row", HTMLDivElement);
 const moreActivitiesCount = getElement("more-activities-count", HTMLSpanElement);
 const moreActivitiesFill = getElement("more-activities-fill", HTMLDivElement);
+const exploreBingRow = getElement("explore-bing-row", HTMLDivElement);
 const exploreBingCount = getElement("explore-bing-count", HTMLSpanElement);
 const exploreBingFill = getElement("explore-bing-fill", HTMLDivElement);
 const refreshBtn = getElement("refresh-btn", HTMLButtonElement);
@@ -57,6 +62,8 @@ function updateActionButton(running: boolean): void {
 
 function updateCheckboxes(disabled: boolean): void {
   cbPc.disabled = disabled;
+  cbDailyCards.disabled = disabled;
+  cbMoreActivities.disabled = disabled;
   cbExploreBing.disabled = disabled;
 }
 
@@ -96,6 +103,12 @@ function updateRewardsUI(info: RewardsInfo): void {
 
 function updateCardProgressUI(state: BotState): void {
   // During bot run, override card bars with bot progress
+  if (state.dailyCards) {
+    updateProgressBar(dailyCardsCount, dailyCardsFill, state.dailyCards.currentCard, state.dailyCards.totalCards);
+  }
+  if (state.moreActivities) {
+    updateProgressBar(moreActivitiesCount, moreActivitiesFill, state.moreActivities.currentCard, state.moreActivities.totalCards);
+  }
   if (state.exploreBing) {
     updateProgressBar(exploreBingCount, exploreBingFill, state.exploreBing.currentCard, state.exploreBing.totalCards);
   }
@@ -109,7 +122,13 @@ function updateBotUI(state: BotState): void {
     updateActionButton(true);
     updateCheckboxes(true);
 
-    if (state.exploreBing?.isActive) {
+    if (state.dailyCards?.isActive) {
+      const { currentCard, totalCards } = state.dailyCards;
+      setStatus("running", `Daily Cards ${currentCard}/${totalCards}`);
+    } else if (state.moreActivities?.isActive) {
+      const { currentCard, totalCards } = state.moreActivities;
+      setStatus("running", `Activities ${currentCard}/${totalCards}`);
+    } else if (state.exploreBing?.isActive) {
       const { currentCard, totalCards } = state.exploreBing;
       setStatus("running", `Explore Bing ${currentCard}/${totalCards}`);
     } else {
@@ -123,7 +142,7 @@ function updateBotUI(state: BotState): void {
     updateActionButton(false);
     updateCheckboxes(false);
     setStatus("error", state.error);
-  } else if (state.currentIndex > 0 || state.exploreBing) {
+  } else if (state.currentIndex > 0 || state.dailyCards || state.moreActivities || state.exploreBing) {
     updateActionButton(false);
     updateCheckboxes(false);
     setStatus("done", "Done");
@@ -200,11 +219,13 @@ function updateStartButtonState(): void {
     actionBtn.disabled = false;
     return;
   }
-  const anyChecked = cbPc.checked || cbExploreBing.checked;
+  const anyChecked = cbPc.checked || cbDailyCards.checked || cbMoreActivities.checked || cbExploreBing.checked;
   actionBtn.disabled = !anyChecked;
 }
 
 cbPc.addEventListener("change", updateStartButtonState);
+cbDailyCards.addEventListener("change", updateStartButtonState);
+cbMoreActivities.addEventListener("change", updateStartButtonState);
 cbExploreBing.addEventListener("change", updateStartButtonState);
 
 // --- Messaging helper ---
@@ -265,11 +286,13 @@ actionBtn.addEventListener("click", () => {
   }
 
   const pcSearches = cbPc.checked;
+  const dailyCards = cbDailyCards.checked;
+  const moreActivities = cbMoreActivities.checked;
   const exploreBing = cbExploreBing.checked;
 
-  if (!pcSearches && !exploreBing) return;
+  if (!pcSearches && !dailyCards && !moreActivities && !exploreBing) return;
 
-  sendMsg({ action: "start", pcSearches, exploreBing });
+  sendMsg({ action: "start", pcSearches, dailyCards, moreActivities, exploreBing });
 });
 
 // Refresh rewards info button

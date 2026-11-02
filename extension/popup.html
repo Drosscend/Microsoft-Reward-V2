@@ -138,15 +138,6 @@
       color: #aaa;
     }
 
-    a.progress-name {
-      text-decoration: none;
-    }
-
-    a.progress-name:hover {
-      color: #fff;
-      text-decoration: underline;
-    }
-
     .progress-count {
       color: #fff;
       font-weight: 600;
@@ -460,7 +451,7 @@
     </div>
     <div class="progress-row" id="daily-cards-row">
       <div class="progress-label">
-        <a class="progress-name" href="https://rewards.bing.com/dashboard" target="_blank">Daily cards (manual) &#8599;</a>
+        <span class="progress-name">Daily cards</span>
         <span class="progress-count" id="daily-cards-count">-- / --</span>
       </div>
       <div class="progress-bar">
@@ -469,7 +460,7 @@
     </div>
     <div class="progress-row" id="more-activities-row">
       <div class="progress-label">
-        <a class="progress-name" href="https://rewards.bing.com/earn" target="_blank">More activities (manual) &#8599;</a>
+        <span class="progress-name">More activities</span>
         <span class="progress-count" id="more-activities-count">-- / --</span>
       </div>
       <div class="progress-bar">
@@ -493,6 +484,14 @@
       <label>
         <input type="checkbox" id="cb-pc" checked>
         PC (35)
+      </label>
+      <label>
+        <input type="checkbox" id="cb-daily-cards" checked>
+        Daily Cards
+      </label>
+      <label>
+        <input type="checkbox" id="cb-more-activities" checked>
+        More Activities
       </label>
       <label>
         <input type="checkbox" id="cb-explore-bing" checked>

@@ -1,19 +1,24 @@
 // Service worker: orchestration via chrome.debugger CDP
 
 import { cdpSend } from "../modules/cdp";
-import { performExploreBing } from "../modules/cards";
+import { performDailyCards, performExploreBing, performMoreActivities } from "../modules/cards";
 import { setIconDefault, setIconRunning } from "../modules/icon";
 import { clearActivityLog, logActivity } from "../modules/logger";
-import { fetchRewards, getRemainingSearches } from "../modules/rewards";
+import { fetchRewards, getRemainingSearches, refreshRewardsSession } from "../modules/rewards";
 import { loadSearchTerms, performNextSearch, startSearchPhase } from "../modules/search";
 import { getDefaultState, getState, setState } from "../modules/state";
 import type { BotState, PopupToWorkerMessage } from "../shared/types";
 
 // --- Orchestration ---
 
-async function startSearches(pcSearches: boolean, exploreBing: boolean): Promise<void> {
+async function startSearches(pcSearches: boolean, dailyCards: boolean, moreActivities: boolean, exploreBing: boolean): Promise<void> {
   // Fetch rewards info and actionable cards before starting
-  const rewards = await fetchRewards();
+  let rewards = await fetchRewards();
+  if (!rewards) {
+    await logActivity("info", "Renewing Rewards session");
+    await refreshRewardsSession();
+    rewards = await fetchRewards();
+  }
 
   // Check remaining PC searches
   let remaining = 0;
@@ -39,7 +44,7 @@ async function startSearches(pcSearches: boolean, exploreBing: boolean): Promise
   }
 
   // Nothing to do at all
-  if (remaining === 0 && !exploreBing) {
+  if (remaining === 0 && !dailyCards && !moreActivities && !exploreBing) {
     logActivity("info", "All selected tasks are already complete");
     await setState({ ...getDefaultState(), alreadyComplete: true });
     return;
@@ -102,15 +107,24 @@ async function startSearches(pcSearches: boolean, exploreBing: boolean): Promise
 
   await logActivity("info", "Bot started");
 
-  // Run the explore phase before searches, then refresh so progress bars reflect completion
-  if (exploreBing) {
-    await performExploreBing(rewards?.exploreCards ?? []);
+  // API-based card filters (skip completed + zero-point cards)
+  const cardFilters = rewards?.cards;
+
+  // Run reward card phases synchronously before searches
+  const hasCardPhases = dailyCards || moreActivities || exploreBing;
+
+  if (dailyCards) await performDailyCards(tabId, cardFilters?.dailyCards ?? []);
+  if (moreActivities) await performMoreActivities(tabId, cardFilters?.moreActivities ?? []);
+  if (exploreBing) await performExploreBing(tabId, cardFilters?.exploreBing ?? []);
+
+  // Refresh rewards info after card phases so progress bars reflect completion
+  if (hasCardPhases) {
     await fetchRewards();
   }
 
   // If PC searches are needed, continue with alarm-based flow
   if (remaining > 0) {
-    await startSearchPhase(remaining);
+    await startSearchPhase(remaining, hasCardPhases, tabId);
   } else {
     // Only card phases were requested, we're done
     await stopSearches();
@@ -143,7 +157,7 @@ async function stopSearches(): Promise<void> {
 chrome.runtime.onMessage.addListener(
   (message: PopupToWorkerMessage, _sender, sendResponse) => {
     if (message.action === "start") {
-      startSearches(message.pcSearches, message.exploreBing)
+      startSearches(message.pcSearches, message.dailyCards, message.moreActivities, message.exploreBing)
         .then(() => sendResponse({ ok: true }))
         .catch((err) => sendResponse({ ok: false, error: String(err) }));
       return true;

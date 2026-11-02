@@ -46,28 +46,28 @@ afterAll(() => {
 });
 
 describe("fetchRewards", () => {
-  test("counts today's daily cards with points", async () => {
+  test("keeps today's incomplete daily cards with points", async () => {
     const rewards = await fetchRewards();
 
+    expect(rewards?.cards.dailyCards.map((c) => c.name)).toEqual(["Global_DailySet_20261101_Child2"]);
     expect(rewards?.info.dailyCardsProgress).toEqual({ current: 1, target: 2 });
   });
 
   test("splits explore cards, drops locked ones and other markets", async () => {
     const rewards = await fetchRewards();
 
-    expect(rewards?.exploreCards.map((c) => c.name)).toEqual([
+    expect(rewards?.cards.exploreBing.map((c) => c.name)).toEqual([
       "FRFR_couponcodes_exploreonbing_activation_Evergreen",
     ]);
-    expect(rewards?.info.moreActivitiesProgress).toEqual({ current: 1, target: 2 });
-    expect(rewards?.info.exploreBingProgress).toEqual({ current: 0, target: 1 });
+    expect(rewards?.cards.moreActivities.map((c) => c.name)).toEqual([
+      "EN_Bing_moreactivities_flight_202606",
+    ]);
   });
 
   test("exposes card URLs, points and the account country", async () => {
     const rewards = await fetchRewards();
 
-    expect(rewards?.exploreCards[0].url).toBe(
-      "https://www.bing.com/search?q=FRFR_couponcodes_exploreonbing_activation_Evergreen",
-    );
+    expect(rewards?.cards.dailyCards[0].url).toBe("https://www.bing.com/search?q=Global_DailySet_20261101_Child2");
     expect(rewards?.info.points).toBe(8901);
     expect(rewards?.country).toBe("fr");
   });

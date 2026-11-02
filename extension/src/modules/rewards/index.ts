@@ -1,1 +1,1 @@
-export { fetchRewards, getRemainingSearches } from "./rewards";
+export { fetchRewards, getRemainingSearches, refreshRewardsSession } from "./rewards";

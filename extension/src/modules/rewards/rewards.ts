@@ -51,6 +51,28 @@ function progressOf(promos: Promotion[]): { current: number; target: number } {
   return { current: promos.filter((p) => p.complete).length, target: promos.length };
 }
 
+function actionable(promos: Promotion[]): CardTarget[] {
+  return promos.filter((p) => !p.complete).map(toCardTarget);
+}
+
+// An expired session makes the API redirect to the Microsoft login, which a fetch cannot follow.
+// Loading the site in a tab renews it silently.
+export async function refreshRewardsSession(timeout = 20_000): Promise<void> {
+  const tab = await chrome.tabs.create({ url: "https://rewards.bing.com/", active: false });
+  const tabId = tab.id!;
+  const deadline = Date.now() + timeout;
+  try {
+    while (Date.now() < deadline) {
+      const current = await chrome.tabs.get(tabId);
+      if (current.status === "complete" && current.url?.startsWith("https://rewards.bing.com/")) return;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    console.warn("[MSR] Rewards session refresh timed out");
+  } finally {
+    await chrome.tabs.remove(tabId).catch(() => console.warn("[MSR] Could not close rewards tab"));
+  }
+}
+
 export async function fetchRewards(): Promise<RewardsSnapshot | null> {
   try {
     const resp = await fetch("https://rewards.bing.com/api/getuserinfo", {
@@ -97,7 +119,11 @@ export async function fetchRewards(): Promise<RewardsSnapshot | null> {
 
     return {
       info,
-      exploreCards: explorePromos.filter((p) => !p.complete).map(toCardTarget),
+      cards: {
+        dailyCards: actionable(dailyPromos),
+        moreActivities: actionable(regularPromos),
+        exploreBing: actionable(explorePromos),
+      },
       country: dashboard.userProfile?.attributes?.country ?? null,
     };
   } catch (error) {
