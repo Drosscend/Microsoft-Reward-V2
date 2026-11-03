@@ -1,13 +1,13 @@
 # Microsoft Rewards Bot
 
-An Edge browser extension that automatically performs Bing searches to earn Microsoft Rewards points. Just log in to your Microsoft account, click Start, and let the bot do the rest.
+A Chrome and Edge browser extension that automatically performs Bing searches to earn Microsoft Rewards points. Just log in to your Microsoft account, click Start, and let the bot do the rest.
 
 ---
 
 ## Features
 
 - **Automated Bing searches** — earns PC search points hands-free
-- **Daily cards & activities** — completes daily promotions and "More Activities" tasks
+- **Daily cards & activities** — completes daily promotions and "More Activities" tasks (Chrome only: Edge blocks extensions on rewards.bing.com, so do them by hand there)
 - **Explore Bing** — handles the Explore Bing bonus searches
 - **Human-like behavior** — simulates scrolling, mouse movements, and random clicks to look natural
 - **Trending search terms** — uses Google Trends and Google autocomplete for realistic queries
@@ -16,7 +16,7 @@ An Edge browser extension that automatically performs Bing searches to earn Micr
 
 ## Requirements
 
-- **Microsoft Edge** (Chromium-based)
+- **Google Chrome** (full features) or **Microsoft Edge** (no daily cards or activities)
 - **A Microsoft account** logged in to [Bing](https://www.bing.com) and [Microsoft Rewards](https://rewards.bing.com)
 - **Bun** (only if you want to build from source)
 
@@ -27,7 +27,7 @@ An Edge browser extension that automatically performs Bing searches to earn Micr
 1. Go to the [Releases](https://github.com/Drosscend/Microsoft-Reward-V2/releases) page
 2. Download the latest `microsoft-rewards-bot.zip`
 3. Extract the zip to a folder on your computer
-4. Open Edge and navigate to `edge://extensions`
+4. Open `chrome://extensions` (Chrome) or `edge://extensions` (Edge)
 5. Enable **Developer mode** (toggle in the bottom-left)
 6. Click **Load unpacked** and select the extracted folder
 
@@ -45,7 +45,7 @@ Then load the `extension/` folder as an unpacked extension (same steps 4-6 above
 ## Usage
 
 1. Make sure you are **logged in** to your Microsoft account on [bing.com](https://www.bing.com)
-2. Click the extension icon in the Edge toolbar
+2. Click the extension icon in the browser toolbar
 3. Check the tasks you want to run (PC searches, Daily Cards, More Activities, Explore Bing)
 4. Click **Start**
 5. The bot opens a tab and performs searches automatically — you can watch or keep browsing
@@ -62,14 +62,14 @@ This extension is provided for educational and personal use only. Using automati
 
 # Microsoft Rewards Bot (FR)
 
-Une extension Edge qui effectue automatiquement des recherches Bing pour gagner des points Microsoft Rewards. Connectez-vous à votre compte Microsoft, cliquez sur Start, et laissez le bot faire le reste.
+Une extension Chrome et Edge qui effectue automatiquement des recherches Bing pour gagner des points Microsoft Rewards. Connectez-vous à votre compte Microsoft, cliquez sur Start, et laissez le bot faire le reste.
 
 ---
 
 ## Fonctionnalités
 
 - **Recherches Bing automatiques** — accumule les points de recherche PC sans effort
-- **Cartes du jour & activités** — complète les promotions quotidiennes et les tâches "More Activities"
+- **Cartes du jour & activités** — complète les promotions quotidiennes et les tâches "More Activities" (Chrome uniquement : Edge bloque les extensions sur rewards.bing.com, à faire à la main)
 - **Explore Bing** — gère les recherches bonus Explore Bing
 - **Comportement humain** — simule le défilement, les mouvements de souris et des clics aléatoires pour paraître naturel
 - **Termes de recherche tendance** — utilise Google Trends et l'autocomplétion de Google pour des requêtes réalistes
@@ -78,7 +78,7 @@ Une extension Edge qui effectue automatiquement des recherches Bing pour gagner 
 
 ## Prérequis
 
-- **Microsoft Edge** (basé sur Chromium)
+- **Google Chrome** (toutes les fonctions) ou **Microsoft Edge** (sans les cartes du jour ni les activités)
 - **Un compte Microsoft** connecté sur [Bing](https://www.bing.com) et [Microsoft Rewards](https://rewards.bing.com)
 - **Bun** (uniquement pour compiler depuis les sources)
 
@@ -89,7 +89,7 @@ Une extension Edge qui effectue automatiquement des recherches Bing pour gagner 
 1. Allez sur la page [Releases](https://github.com/Drosscend/Microsoft-Reward-V2/releases)
 2. Téléchargez le dernier `microsoft-rewards-bot.zip`
 3. Extrayez le zip dans un dossier sur votre ordinateur
-4. Ouvrez Edge et allez sur `edge://extensions`
+4. Ouvrez `chrome://extensions` (Chrome) ou `edge://extensions` (Edge)
 5. Activez le **mode développeur** (en bas à gauche)
 6. Cliquez sur **Charger non compressé** et sélectionnez le dossier extrait
 
@@ -107,7 +107,7 @@ Puis chargez le dossier `extension/` comme extension non compressée (mêmes ét
 ## Utilisation
 
 1. Assurez-vous d'être **connecté** à votre compte Microsoft sur [bing.com](https://www.bing.com)
-2. Cliquez sur l'icône de l'extension dans la barre d'outils Edge
+2. Cliquez sur l'icône de l'extension dans la barre d'outils du navigateur
 3. Cochez les tâches à exécuter (PC searches, Daily Cards, More Activities, Explore Bing)
 4. Cliquez sur **Start**
 5. Le bot ouvre un onglet et effectue les recherches automatiquement — vous pouvez regarder ou continuer à naviguer
